@@ -1,0 +1,2 @@
+{"timestamp": "2025-07-30T15:55:42.835145", "message": "Kernel panic: unable to mount root filesystem", "criticality": "critical", "context": {"component": "filesystem", "board": "radxa-rock5b+"}}
+{"timestamp": "2025-07-30T15:55:54.628496", "message": "Build monitor error: [Errno 2] No such file or directory: '../linux'", "criticality": "critical", "context": {}}

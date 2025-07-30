@@ -1,0 +1,4 @@
+{"timestamp": "2025-07-30T15:48:13.173620", "message": "Deprecated API used in driver", "criticality": "warning", "context": {"component": "driver", "api": "deprecated_function"}}
+{"timestamp": "2025-07-30T16:38:00.102149", "message": "No defconfig files found", "level": "warning", "context": {}}
+{"timestamp": "2025-07-30T16:38:00.102964", "message": "No .config file found to backup", "level": "warning", "context": {}}
+{"timestamp": "2025-07-30T16:39:29.386465", "message": "No defconfig files found", "level": "warning", "context": {}}

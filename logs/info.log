@@ -1,0 +1,6 @@
+{"timestamp": "2025-07-30T16:38:00.098757", "message": "Kernel directory validated: ../../linux", "level": "info", "context": {}}
+{"timestamp": "2025-07-30T16:39:19.193805", "message": "Kernel build completed successfully", "criticality": "info", "context": {}}
+{"timestamp": "2025-07-30T16:39:29.382740", "message": "Kernel directory validated: ../../linux", "level": "info", "context": {}}
+{"timestamp": "2025-07-30T16:39:29.387960", "message": "Configuration backed up to: ../../configs/demo_backup_20250730_163929.config", "level": "info", "context": {}}
+{"timestamp": "2025-07-30T18:12:16.509795", "message": "Kernel build completed successfully", "criticality": "info", "context": {}}
+{"timestamp": "2025-07-30T18:12:51.966186", "message": "Kernel build completed successfully", "criticality": "info", "context": {}}

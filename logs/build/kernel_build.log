@@ -1,0 +1,76 @@
+2025-07-30 16:38:46 | INFO | make: the '-j' option requires a positive integer argument
+2025-07-30 16:38:46 | INFO | Usage: make [options] [target] ...
+2025-07-30 16:38:46 | INFO | Options:
+2025-07-30 16:38:46 | INFO | -b, -m                      Ignored for compatibility.
+2025-07-30 16:38:46 | INFO | -B, --always-make           Unconditionally make all targets.
+2025-07-30 16:38:46 | INFO | -C DIRECTORY, --directory=DIRECTORY
+2025-07-30 16:38:46 | INFO | Change to DIRECTORY before doing anything.
+2025-07-30 16:38:46 | INFO | -d                          Print lots of debugging information.
+2025-07-30 16:38:46 | INFO | --debug[=FLAGS]             Print various types of debugging information.
+2025-07-30 16:38:46 | INFO | -e, --environment-overrides
+2025-07-30 16:38:46 | INFO | Environment variables override makefiles.
+2025-07-30 16:38:46 | INFO | -E STRING, --eval=STRING    Evaluate STRING as a makefile statement.
+2025-07-30 16:38:46 | INFO | -f FILE, --file=FILE, --makefile=FILE
+2025-07-30 16:38:46 | INFO | Read FILE as a makefile.
+2025-07-30 16:38:46 | INFO | -h, --help                  Print this message and exit.
+2025-07-30 16:38:46 | INFO | -i, --ignore-errors         Ignore errors from recipes.
+2025-07-30 16:38:46 | INFO | -I DIRECTORY, --include-dir=DIRECTORY
+2025-07-30 16:38:46 | INFO | Search DIRECTORY for included makefiles.
+2025-07-30 16:38:46 | INFO | -j [N], --jobs[=N]          Allow N jobs at once; infinite jobs with no arg.
+2025-07-30 16:38:46 | INFO | -k, --keep-going            Keep going when some targets can't be made.
+2025-07-30 16:38:46 | INFO | -l [N], --load-average[=N], --max-load[=N]
+2025-07-30 16:38:46 | INFO | Don't start multiple jobs unless load is below N.
+2025-07-30 16:38:46 | INFO | -L, --check-symlink-times   Use the latest mtime between symlinks and target.
+2025-07-30 16:38:46 | INFO | -n, --just-print, --dry-run, --recon
+2025-07-30 16:38:46 | INFO | Don't actually run any recipe; just print them.
+2025-07-30 16:38:46 | INFO | -o FILE, --old-file=FILE, --assume-old=FILE
+2025-07-30 16:38:46 | INFO | Consider FILE to be very old and don't remake it.
+2025-07-30 16:38:46 | INFO | -O[TYPE], --output-sync[=TYPE]
+2025-07-30 16:38:46 | INFO | Synchronize output of parallel jobs by TYPE.
+2025-07-30 16:38:46 | INFO | -p, --print-data-base       Print make's internal database.
+2025-07-30 16:38:46 | INFO | -q, --question              Run no recipe; exit status says if up to date.
+2025-07-30 16:38:46 | INFO | -r, --no-builtin-rules      Disable the built-in implicit rules.
+2025-07-30 16:38:46 | INFO | -R, --no-builtin-variables  Disable the built-in variable settings.
+2025-07-30 16:38:46 | INFO | -s, --silent, --quiet       Don't echo recipes.
+2025-07-30 16:38:46 | INFO | --no-silent                 Echo recipes (disable --silent mode).
+2025-07-30 16:38:46 | INFO | -S, --no-keep-going, --stop
+2025-07-30 16:38:46 | INFO | Turns off -k.
+2025-07-30 16:38:46 | INFO | -t, --touch                 Touch targets instead of remaking them.
+2025-07-30 16:38:46 | INFO | --trace                     Print tracing information.
+2025-07-30 16:38:46 | INFO | -v, --version               Print the version number of make and exit.
+2025-07-30 16:38:46 | INFO | -w, --print-directory       Print the current directory.
+2025-07-30 16:38:46 | INFO | --no-print-directory        Turn off -w, even if it was turned on implicitly.
+2025-07-30 16:38:46 | INFO | -W FILE, --what-if=FILE, --new-file=FILE, --assume-new=FILE
+2025-07-30 16:38:46 | INFO | Consider FILE to be infinitely new.
+2025-07-30 16:38:46 | INFO | --warn-undefined-variables  Warn when an undefined variable is referenced.
+2025-07-30 16:38:46 | INFO | 
+2025-07-30 16:38:46 | INFO | This program built for x86_64-pc-linux-gnu
+2025-07-30 16:38:46 | INFO | Report bugs to <bug-make@gnu.org>
+2025-07-30 16:38:46 | ERROR | Build failed with return code: 2 | Context: None
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/basic/fixdep
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/kconfig/conf.o
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/kconfig/expr.o
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/kconfig/confdata.o
+2025-07-30 16:39:14 | INFO | LEX     scripts/kconfig/lexer.lex.c
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/kconfig/preprocess.o
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/kconfig/menu.o
+2025-07-30 16:39:14 | INFO | YACC    scripts/kconfig/parser.tab.[ch]
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/kconfig/symbol.o
+2025-07-30 16:39:14 | INFO | HOSTCC  scripts/kconfig/util.o
+2025-07-30 16:39:15 | INFO | HOSTCC  scripts/kconfig/lexer.lex.o
+2025-07-30 16:39:15 | INFO | HOSTCC  scripts/kconfig/parser.tab.o
+2025-07-30 16:39:15 | INFO | HOSTLD  scripts/kconfig/conf
+2025-07-30 16:39:15 | INFO | *** Default configuration is based on 'defconfig'
+2025-07-30 16:39:19 | INFO | #
+2025-07-30 16:39:19 | INFO | # configuration written to .config
+2025-07-30 16:39:19 | INFO | #
+2025-07-30 16:39:19 | INFO | Kernel build completed successfully | Context: None
+2025-07-30 18:12:13 | INFO | *** Default configuration is based on 'defconfig'
+2025-07-30 18:12:16 | INFO | #
+2025-07-30 18:12:16 | INFO | # configuration written to .config
+2025-07-30 18:12:16 | INFO | #
+2025-07-30 18:12:16 | INFO | Kernel build completed successfully | Context: None
+2025-07-30 18:12:51 | INFO | #
+2025-07-30 18:12:51 | INFO | # configuration written to .config
+2025-07-30 18:12:51 | INFO | #
+2025-07-30 18:12:51 | INFO | Kernel build completed successfully | Context: None

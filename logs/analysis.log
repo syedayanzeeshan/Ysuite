@@ -1,0 +1,91 @@
+2025-07-30 15:48:13 | CRITICAL | __main__:log_error:118 | Kernel panic: unable to mount root filesystem | Context: {'component': 'filesystem', 'board': 'radxa-rock5b+'}
+2025-07-30 15:48:13 | ERROR | __main__:log_error:120 | Module not found: xyz_driver | Context: {'component': 'driver', 'module': 'xyz_driver'}
+2025-07-30 15:48:13 | WARNING | __main__:log_error:122 | Deprecated API used in driver | Context: {'component': 'driver', 'api': 'deprecated_function'}
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | make: the '-j' option requires a positive integer argument
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Usage: make [options] [target] ...
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Options:
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -b, -m                      Ignored for compatibility.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -B, --always-make           Unconditionally make all targets.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -C DIRECTORY, --directory=DIRECTORY
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Change to DIRECTORY before doing anything.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -d                          Print lots of debugging information.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | --debug[=FLAGS]             Print various types of debugging information.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -e, --environment-overrides
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Environment variables override makefiles.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -E STRING, --eval=STRING    Evaluate STRING as a makefile statement.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -f FILE, --file=FILE, --makefile=FILE
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Read FILE as a makefile.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -h, --help                  Print this message and exit.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -i, --ignore-errors         Ignore errors from recipes.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -I DIRECTORY, --include-dir=DIRECTORY
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Search DIRECTORY for included makefiles.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -j [N], --jobs[=N]          Allow N jobs at once; infinite jobs with no arg.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -k, --keep-going            Keep going when some targets can't be made.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -l [N], --load-average[=N], --max-load[=N]
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Don't start multiple jobs unless load is below N.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -L, --check-symlink-times   Use the latest mtime between symlinks and target.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -n, --just-print, --dry-run, --recon
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Don't actually run any recipe; just print them.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -o FILE, --old-file=FILE, --assume-old=FILE
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Consider FILE to be very old and don't remake it.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -O[TYPE], --output-sync[=TYPE]
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Synchronize output of parallel jobs by TYPE.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -p, --print-data-base       Print make's internal database.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -q, --question              Run no recipe; exit status says if up to date.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -r, --no-builtin-rules      Disable the built-in implicit rules.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -R, --no-builtin-variables  Disable the built-in variable settings.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -s, --silent, --quiet       Don't echo recipes.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | --no-silent                 Echo recipes (disable --silent mode).
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -S, --no-keep-going, --stop
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Turns off -k.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -t, --touch                 Touch targets instead of remaking them.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | --trace                     Print tracing information.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -v, --version               Print the version number of make and exit.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -w, --print-directory       Print the current directory.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | --no-print-directory        Turn off -w, even if it was turned on implicitly.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | -W FILE, --what-if=FILE, --new-file=FILE, --assume-new=FILE
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Consider FILE to be infinitely new.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | --warn-undefined-variables  Warn when an undefined variable is referenced.
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | 
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | This program built for x86_64-pc-linux-gnu
+2025-07-30 16:38:46 | INFO | __main__:monitor_build_process:115 | Report bugs to <bug-make@gnu.org>
+2025-07-30 16:38:46 | ERROR | kernel_log_analyzer:log_error:120 | Build failed with return code: 2 | Context: None
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/basic/fixdep
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/conf.o
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/expr.o
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/confdata.o
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | LEX     scripts/kconfig/lexer.lex.c
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/preprocess.o
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/menu.o
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | YACC    scripts/kconfig/parser.tab.[ch]
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/symbol.o
+2025-07-30 16:39:14 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/util.o
+2025-07-30 16:39:15 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/lexer.lex.o
+2025-07-30 16:39:15 | INFO | __main__:monitor_build_process:116 | HOSTCC  scripts/kconfig/parser.tab.o
+2025-07-30 16:39:15 | INFO | __main__:monitor_build_process:116 | HOSTLD  scripts/kconfig/conf
+2025-07-30 16:39:15 | INFO | __main__:monitor_build_process:116 | *** Default configuration is based on 'defconfig'
+2025-07-30 16:39:19 | INFO | __main__:monitor_build_process:116 | #
+2025-07-30 16:39:19 | INFO | __main__:monitor_build_process:116 | # configuration written to .config
+2025-07-30 16:39:19 | INFO | __main__:monitor_build_process:116 | #
+2025-07-30 16:39:19 | INFO | kernel_log_analyzer:log_error:124 | Kernel build completed successfully | Context: None
+2025-07-30 17:08:40 | CRITICAL | kernel_log_analyzer:log_error:118 | Kernel panic: unable to mount root filesystem | Context: {'board': 'radxa-rock5b+'}
+2025-07-30 17:08:40 | INFO | kernel_log_analyzer:log_error:124 | rk3588-pcie: PCIe link training failed | Context: {'board': 'radxa-rock5b+'}
+2025-07-30 17:08:40 | INFO | kernel_log_analyzer:log_error:124 | mali-gpu: GPU fault detected | Context: {'board': 'radxa-rock5b+'}
+2025-07-30 17:08:40 | INFO | kernel_log_analyzer:log_error:124 | thermal: Critical temperature reached on RK3588 | Context: {'board': 'radxa-rock5b+'}
+2025-07-30 18:09:49 | CRITICAL | kernel_log_analyzer:log_error:141 | rockchip-pcie: PCIe link training failed | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:09:49 | CRITICAL | kernel_log_analyzer:log_error:141 | rockchip-cpufreq: Critical frequency error | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:09:49 | CRITICAL | kernel_log_analyzer:log_error:141 | rk3588-thermal: Critical temperature reached | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:09:49 | CRITICAL | kernel_log_analyzer:log_error:141 | coresight-mali: GPU fault detected | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:09:49 | CRITICAL | kernel_log_analyzer:log_error:141 | rockchip-efuse: Secure OTP error | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:09:49 | ERROR | kernel_log_analyzer:log_error:143 | rockchip-pinctrl: Pin control error | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:09:49 | ERROR | kernel_log_analyzer:log_error:143 | rockchip-saradc: ADC conversion failed | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:09:49 | CRITICAL | kernel_log_analyzer:log_error:141 | rk3588-panic: Hardware panic detected | Context: {'board': 'radxa-rock5b+', 'component': 'rockchip'}
+2025-07-30 18:12:13 | INFO | __main__:monitor_build_process:116 | *** Default configuration is based on 'defconfig'
+2025-07-30 18:12:16 | INFO | __main__:monitor_build_process:116 | #
+2025-07-30 18:12:16 | INFO | __main__:monitor_build_process:116 | # configuration written to .config
+2025-07-30 18:12:16 | INFO | __main__:monitor_build_process:116 | #
+2025-07-30 18:12:16 | INFO | kernel_log_analyzer:log_error:147 | Kernel build completed successfully | Context: None
+2025-07-30 18:12:51 | INFO | __main__:monitor_build_process:116 | #
+2025-07-30 18:12:51 | INFO | __main__:monitor_build_process:116 | # configuration written to .config
+2025-07-30 18:12:51 | INFO | __main__:monitor_build_process:116 | #
+2025-07-30 18:12:51 | INFO | kernel_log_analyzer:log_error:147 | Kernel build completed successfully | Context: None

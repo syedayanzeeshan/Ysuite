@@ -1,0 +1,4 @@
+{"timestamp": "2025-07-30T15:55:42.835838", "message": "Module not found: xyz_driver", "criticality": "error", "context": {"component": "driver", "module": "xyz_driver"}}
+{"timestamp": "2025-07-30T15:55:58.784501", "message": "Kernel directory not found: ../linux", "level": "error", "context": {}}
+{"timestamp": "2025-07-30T16:37:23.183069", "message": "Kernel directory not found: ../linux", "level": "error", "context": {}}
+{"timestamp": "2025-07-30T16:37:30.913308", "message": "Kernel directory not found: ../linux", "level": "error", "context": {}}

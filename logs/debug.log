@@ -1,0 +1,3 @@
+{"timestamp": "2025-07-30T17:08:40.186298", "message": "rk3588-pcie: PCIe link training failed", "criticality": "debug", "context": {"board": "radxa-rock5b+"}}
+{"timestamp": "2025-07-30T17:08:40.186760", "message": "mali-gpu: GPU fault detected", "criticality": "debug", "context": {"board": "radxa-rock5b+"}}
+{"timestamp": "2025-07-30T17:08:40.187100", "message": "thermal: Critical temperature reached on RK3588", "criticality": "debug", "context": {"board": "radxa-rock5b+"}}
