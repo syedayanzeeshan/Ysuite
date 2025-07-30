@@ -4,3 +4,4 @@
 2025-07-30 16:39:29 | INFO | Kernel directory validated: ../../linux | Context: None
 2025-07-30 16:39:29 | WARNING | No defconfig files found | Context: None
 2025-07-30 16:39:29 | INFO | Configuration backed up to: ../../configs/demo_backup_20250730_163929.config | Context: None
+2025-07-30 20:20:32 | ERROR | Invalid kernel directory - no Makefile found: ../../linux | Context: None

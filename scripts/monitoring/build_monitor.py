@@ -176,7 +176,7 @@ def main():
         "make", f"-j{multiprocessing.cpu_count()}",
         "ARCH=arm64",
         "CROSS_COMPILE=aarch64-linux-gnu-",
-        "rockchip_linux_defconfig"
+        # "rockchip_linux_defconfig"
     ]
     
     # You can modify this command based on your needs
@@ -184,7 +184,7 @@ def main():
     console.print("This will monitor the kernel build process and log all events.")
     
     # Start monitoring
-    monitor.monitor_build_process(build_command, working_dir="../../linux")
+    monitor.monitor_build_process(build_command, working_dir="/home/radxa/kernel-logging-env/linux")
     
     # Generate report
     monitor.generate_build_report()

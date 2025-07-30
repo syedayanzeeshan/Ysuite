@@ -1,9 +1,9 @@
-Build Report - 2025-07-30 18:12:51.968523
+Build Report - 2025-07-30 20:38:26.219715
 ==================================================
-Start Time: 2025-07-30 18:12:48.235718
-End Time: 2025-07-30 18:12:51.966178
-Duration: 0:00:03.730460
-Success: True
+Start Time: 2025-07-30 20:38:26.186393
+End Time: 2025-07-30 20:38:26.211401
+Duration: 0:00:00.025008
+Success: False
 Critical Errors: 0
-Errors: 0
+Errors: 1
 Warnings: 0
