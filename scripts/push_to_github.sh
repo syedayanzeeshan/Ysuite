@@ -17,35 +17,32 @@ echo_error() {
     exit 1
 }
 
-# Initialize git repository
-echo "Initializing git repository..."
-git init
-
-# Configure git
-git config user.name "Syed Ayan Zeeshan"
-git config user.email "syedayanzeeshan@gmail.com"
+# Configure git if not already configured
+if [ -z "$(git config --get user.name)" ]; then
+    git config user.name "Syed Ayan Zeeshan"
+fi
+if [ -z "$(git config --get user.email)" ]; then
+    git config user.email "syedayanzeeshan@gmail.com"
+fi
 
 # Add files
 echo "Adding files..."
 git add .
 
-# Initial commit
-echo "Creating initial commit..."
-git commit -m "Initial commit: Rock 5B Plus Enhanced Kernel
+# Create commit
+echo "Creating commit..."
+git commit -m "Add enhanced kernel features
 
-- Added kernel logging system
-- Implemented power monitoring
-- Added crash reporting
-- Configured Mali GPU driver
-- Added build and verification scripts"
-
-# Add remote
-echo "Adding remote repository..."
-git remote add origin https://github.com/syedayanzeeshan/RadxaAt.git
+- Added kernel logging system with rotation
+- Implemented power monitoring (voltage/current)
+- Added crash reporting with boot-time detection
+- Configured Mali GPU driver with OpenCL/Vulkan support
+- Added build and verification scripts
+- Added comprehensive documentation"
 
 # Push to GitHub
 echo "Pushing to GitHub..."
-git push -u origin main
+git push origin main
 
 echo_success "Successfully pushed to GitHub"
 echo "Repository URL: https://github.com/syedayanzeeshan/RadxaAt"
