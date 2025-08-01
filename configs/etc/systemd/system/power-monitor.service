@@ -1,0 +1,21 @@
+[Unit]
+Description=Power Monitoring Service
+After=network.target kernel-logger.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/power_monitor.py
+Restart=always
+RestartSec=5
+
+# Security settings
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+# Allow access to sysfs for power readings
+ReadOnlyPaths=/sys/class/power_supply/rk808-usb/
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+
+[Install]
+WantedBy=multi-user.target
