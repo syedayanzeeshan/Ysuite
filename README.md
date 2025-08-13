@@ -32,10 +32,11 @@ A unified package for headless Rock 5B+ systems with real-time monitoring, crash
 sudo ./install_ysuite.sh
 ```
 
-### Remote Deployment
+### Direct Board Installation
 ```bash
-# Deploy to Rock 5B+ board
-./deploy_ysuite.sh
+# Copy files to your Rock 5B+ board (via USB, SD card, or direct transfer)
+# Then on the board, run:
+sudo ./install_ysuite.sh
 ```
 
 ## 🎯 Usage
@@ -64,7 +65,7 @@ ypower
 
 - **ysuite.py** - Main Python script with all functionality
 - **install_ysuite.sh** - Installation script
-- **deploy_ysuite.sh** - Remote deployment script
+- **deploy_ysuite.sh** - Installation guide and instructions
 - **YSUITE_SUMMARY.md** - Detailed documentation
 
 ## 🔧 Requirements
