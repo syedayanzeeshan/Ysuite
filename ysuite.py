@@ -348,12 +348,47 @@ class YTop:
     def get_watchdog_info(self):
         """Get watchdog resets and crash counts"""
         try:
-            # Check watchdog status
+            # Check watchdog status - try multiple paths
+            watchdog_status = "Not available"
+            watchdog_paths = [
+                '/proc/watchdog',
+                '/dev/watchdog',
+                '/sys/class/watchdog/watchdog0/status',
+                '/sys/class/watchdog/watchdog0/timeout'
+            ]
+            
+            for path in watchdog_paths:
+                try:
+                    if path == '/proc/watchdog':
+                        with open(path, 'r') as f:
+                            watchdog_status = f.read().strip()
+                            if watchdog_status:
+                                break
+                    elif path == '/dev/watchdog':
+                        if os.path.exists(path):
+                            watchdog_status = "Device available"
+                            break
+                    else:
+                        with open(path, 'r') as f:
+                            value = f.read().strip()
+                            if path.endswith('status'):
+                                watchdog_status = f"Status: {value}"
+                            elif path.endswith('timeout'):
+                                watchdog_status = f"Timeout: {value}s"
+                            break
+                except:
+                    continue
+            
+            # Check watchdog service status
             try:
-                with open('/proc/watchdog', 'r') as f:
-                    watchdog_status = f.read().strip()
+                result = subprocess.run(['systemctl', 'is-active', 'watchdog'], 
+                                      capture_output=True, text=True, timeout=2)
+                if result.returncode == 0 and result.stdout.strip() == 'active':
+                    watchdog_status = f"{watchdog_status} (Service: Active)"
+                elif result.stdout.strip() == 'inactive':
+                    watchdog_status = f"{watchdog_status} (Service: Inactive)"
             except:
-                watchdog_status = "Not available"
+                pass
             
             # Check for crash logs
             crash_count = 0
