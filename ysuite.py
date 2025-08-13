@@ -388,6 +388,40 @@ class YTop:
         except:
             return {'watchdog_status': 'Unknown', 'crash_count': 0, 'watchdog_resets': 0}
     
+    def get_opencl_info(self):
+        """Get OpenCL information"""
+        try:
+            import subprocess
+            result = subprocess.run(['clinfo'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                # Parse OpenCL info
+                output = result.stdout
+                if 'ARM Platform' in output:
+                    return {
+                        'available': True,
+                        'platform': 'ARM Platform',
+                        'version': 'OpenCL 3.0 (Mali)'
+                    }
+            return {'available': False, 'platform': 'None', 'version': 'None'}
+        except:
+            return {'available': False, 'platform': 'None', 'version': 'None'}
+    
+    def get_vulkan_info(self):
+        """Get Vulkan information"""
+        try:
+            import subprocess
+            result = subprocess.run(['vulkaninfo', '--summary'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                output = result.stdout
+                if 'Mali' in output or 'ARM' in output:
+                    return {
+                        'available': True,
+                        'driver': 'Mali Vulkan Driver'
+                    }
+            return {'available': False, 'driver': 'None'}
+        except:
+            return {'available': False, 'driver': 'None'}
+    
     def create_bar(self, percentage, width=20):
         """Create a visual progress bar"""
         filled = int(width * percentage / 100)
@@ -924,40 +958,6 @@ class YPower:
         # Save to file
         with open(self.power_file, 'w') as f:
             json.dump(power_data, f, indent=2)
-
-    def get_opencl_info(self):
-        """Get OpenCL information"""
-        try:
-            import subprocess
-            result = subprocess.run(['clinfo'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                # Parse OpenCL info
-                output = result.stdout
-                if 'ARM Platform' in output:
-                    return {
-                        'available': True,
-                        'platform': 'ARM Platform',
-                        'version': 'OpenCL 3.0 (Mali)'
-                    }
-            return {'available': False, 'platform': 'None', 'version': 'None'}
-        except:
-            return {'available': False, 'platform': 'None', 'version': 'None'}
-    
-    def get_vulkan_info(self):
-        """Get Vulkan information"""
-        try:
-            import subprocess
-            result = subprocess.run(['vulkaninfo', '--summary'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                output = result.stdout
-                if 'Mali' in output or 'ARM' in output:
-                    return {
-                        'available': True,
-                        'driver': 'Mali Vulkan Driver'
-                    }
-            return {'available': False, 'driver': 'None'}
-        except:
-            return {'available': False, 'driver': 'None'}
 
 def show_help():
     """Show comprehensive help for YSuite"""
