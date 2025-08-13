@@ -2,7 +2,7 @@
 
 A unified package for headless Rock 5B+ systems with real-time monitoring, crash detection, power management, and system optimization.
 
-## 🚀 Features
+##  Features
 
 ### **ytop** - Real-time System Performance Monitor
 - CPU, GPU, NPU, Memory monitoring
@@ -24,7 +24,7 @@ A unified package for headless Rock 5B+ systems with real-time monitoring, crash
 - Real-time voltage/current monitoring
 - Aggressive 3A current negotiation
 
-## 📦 Installation
+##  Installation
 
 ### Quick Install
 ```bash
@@ -39,7 +39,7 @@ sudo ./install_ysuite.sh
 sudo ./install_ysuite.sh
 ```
 
-## 🎯 Usage
+##  Usage
 
 ### Get Help
 ```bash
@@ -61,20 +61,17 @@ ycrash
 ypower
 ```
 
-## 📁 Package Contents
+##  Package Contents
 
 - **ysuite.py** - Main Python script with all functionality
 - **install_ysuite.sh** - Installation script
 - **deploy_ysuite.sh** - Installation guide and instructions
 - **YSUITE_SUMMARY.md** - Detailed documentation
 
-## 🔧 Requirements
+##  Requirements
 
 - Rock 5B+ board
 - Python 3.8+
 - Linux kernel with sysfs support
 - Root/sudo access for hardware monitoring
 
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
