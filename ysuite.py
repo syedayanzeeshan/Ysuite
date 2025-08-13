@@ -128,8 +128,8 @@ class YTop:
             try:
                 with open('/sys/devices/platform/fec10000.saradc/iio:device0/in_voltage6_raw', 'r') as f:
                     adc_raw = int(f.read().strip())
-                    # Convert to voltage (approximate conversion)
-                    voltage = (adc_raw / 4095) * 3.3
+                    # Convert to voltage (approximate conversion with voltage divider correction)
+                    voltage = (adc_raw / 4095) * 3.3 * 3  # Assuming 3.3V reference and voltage divider
                     sensors['adc_voltage'] = round(voltage, 2)
             except:
                 sensors['adc_voltage'] = 0
@@ -274,7 +274,7 @@ class YTop:
             try:
                 with open('/sys/devices/platform/fec10000.saradc/iio:device0/in_voltage6_raw', 'r') as f:
                     adc_raw = int(f.read().strip())
-                    voltage = (adc_raw / 4095) * 3.3
+                    voltage = (adc_raw / 4095) * 3.3 * 3  # Assuming 3.3V reference and voltage divider
                     power_info['adc_voltage'] = round(voltage, 2)
             except:
                 power_info['adc_voltage'] = 0
@@ -508,26 +508,52 @@ class YLog:
     
     def show_summary(self):
         """Show log summary"""
-        if not self.log_file.exists():
-            print(f"{Colors.YELLOW}No log file found.{Colors.END}")
-            return
-            
-        with open(self.log_file, 'r') as f:
-            logs = json.load(f)
-        
         print(f"{Colors.BOLD}{Colors.CYAN}📊 Log Summary{Colors.END}")
-        print(f"Total events: {len(logs)}")
         
-        # Count by severity
-        critical_count = len([log for log in logs if log.get('severity') == 'critical'])
-        print(f"Critical events: {critical_count}")
+        # Check for existing log file
+        if self.log_file.exists():
+            try:
+                with open(self.log_file, 'r') as f:
+                    logs = json.load(f)
+                
+                print(f"Total events: {len(logs)}")
+                
+                # Count by severity
+                critical_count = len([log for log in logs if log.get('severity') == 'critical'])
+                print(f"Critical events: {critical_count}")
+                
+                # Show recent events
+                if logs:
+                    print(f"\n{Colors.BOLD}Recent Critical Events:{Colors.END}")
+                    recent_logs = logs[-10:]  # Last 10 events
+                    for log in recent_logs:
+                        timestamp = log['timestamp'][:19]  # Remove microseconds
+                        print(f"{Colors.RED}{timestamp}: {log['message'][:80]}...{Colors.END}")
+            except Exception as e:
+                print(f"{Colors.YELLOW}Error reading log file: {e}{Colors.END}")
         
-        # Show recent events
-        print(f"\n{Colors.BOLD}Recent Critical Events:{Colors.END}")
-        recent_logs = logs[-10:]  # Last 10 events
-        for log in recent_logs:
-            timestamp = log['timestamp'][:19]  # Remove microseconds
-            print(f"{Colors.RED}{timestamp}: {log['message'][:80]}...{Colors.END}")
+        # Scan current system logs for recent critical events
+        print(f"\n{Colors.BOLD}Recent System Logs (Last Hour):{Colors.END}")
+        try:
+            result = subprocess.run(['journalctl', '--since', '1 hour ago', '--no-pager'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                critical_count = 0
+                for line in result.stdout.split('\n'):
+                    if any(pattern in line.lower() for pattern in self.critical_patterns):
+                        critical_count += 1
+                        if critical_count <= 5:  # Show first 5 critical events
+                            print(f"{Colors.RED}🚨 {line[:100]}...{Colors.END}")
+                
+                if critical_count == 0:
+                    print(f"{Colors.GREEN}✅ No critical events found in the last hour{Colors.END}")
+                elif critical_count > 5:
+                    print(f"{Colors.YELLOW}... and {critical_count - 5} more critical events{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.YELLOW}Error scanning system logs: {e}{Colors.END}")
+        
+        print(f"\n{Colors.BOLD}Log file location: {self.log_file}{Colors.END}")
+        print(f"Use 'ylog -r' for real-time monitoring")
 
 class YCrash:
     """Crash detection and analysis"""
@@ -599,22 +625,47 @@ class YCrash:
     
     def show_summary(self):
         """Show crash summary"""
-        if not self.crash_file.exists():
-            print(f"{Colors.YELLOW}No crash file found.{Colors.END}")
-            return
-            
-        with open(self.crash_file, 'r') as f:
-            crashes = json.load(f)
-        
         print(f"{Colors.BOLD}{Colors.RED}💥 Crash Summary{Colors.END}")
-        print(f"Total crashes: {len(crashes)}")
         
-        # Show recent crashes
-        print(f"\n{Colors.BOLD}Recent Crashes:{Colors.END}")
-        recent_crashes = crashes[-5:]  # Last 5 crashes
-        for crash in recent_crashes:
-            timestamp = crash['timestamp'][:19]
-            print(f"{Colors.RED}{timestamp}: {crash['message'][:80]}...{Colors.END}")
+        # Check for existing crash file
+        if self.crash_file.exists():
+            try:
+                with open(self.crash_file, 'r') as f:
+                    crashes = json.load(f)
+                
+                print(f"Total crashes: {len(crashes)}")
+                
+                # Show recent crashes
+                if crashes:
+                    print(f"\n{Colors.BOLD}Recent Crashes:{Colors.END}")
+                    recent_crashes = crashes[-5:]  # Last 5 crashes
+                    for crash in recent_crashes:
+                        timestamp = crash['timestamp'][:19]
+                        print(f"{Colors.RED}{timestamp}: {crash['message'][:80]}...{Colors.END}")
+            except Exception as e:
+                print(f"{Colors.YELLOW}Error reading crash file: {e}{Colors.END}")
+        
+        # Scan current dmesg for recent crash events
+        print(f"\n{Colors.BOLD}Recent Kernel Messages (Last Hour):{Colors.END}")
+        try:
+            result = subprocess.run(['dmesg', '-T'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                crash_count = 0
+                for line in result.stdout.split('\n'):
+                    if any(pattern in line.lower() for pattern in self.crash_patterns):
+                        crash_count += 1
+                        if crash_count <= 5:  # Show first 5 crash events
+                            print(f"{Colors.RED}💥 {line[:100]}...{Colors.END}")
+                
+                if crash_count == 0:
+                    print(f"{Colors.GREEN}✅ No crash events found in recent kernel messages{Colors.END}")
+                elif crash_count > 5:
+                    print(f"{Colors.YELLOW}... and {crash_count - 5} more crash events{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.YELLOW}Error scanning kernel messages: {e}{Colors.END}")
+        
+        print(f"\n{Colors.BOLD}Crash file location: {self.crash_file}{Colors.END}")
+        print(f"Use 'ycrash -r' for real-time monitoring")
 
 class YPower:
     """Power monitoring and USB PD negotiation"""
@@ -890,23 +941,17 @@ def install_suite():
 
 def main():
     """Main entry point"""
-    # Debug: Print what we're receiving
-    print(f"DEBUG: sys.argv = {sys.argv}", file=sys.stderr)
-    
     # Detect which command was called
     script_name = Path(sys.argv[0]).name
-    print(f"DEBUG: script_name = {script_name}", file=sys.stderr)
     
     # If called via symlink, use the symlink name as the command
     if script_name in ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp']:
         command = script_name
-        print(f"DEBUG: Command detected via symlink: {command}", file=sys.stderr)
         # Remove the script name from sys.argv so subsequent parsing doesn't see it as an argument
         sys.argv = [sys.argv[0]] + sys.argv[1:]
     else:
         # Called directly as ysuite.py, use first argument as command
         command = sys.argv[1] if len(sys.argv) > 1 else None
-        print(f"DEBUG: Command from argument: {command}", file=sys.stderr)
     
     # Initialize suite
     suite = YSuite()
@@ -918,11 +963,8 @@ def main():
     
     # If no command specified, show help
     if not command:
-        print(f"DEBUG: No command specified, showing help", file=sys.stderr)
         show_help()
         return
-    
-    print(f"DEBUG: Executing command: {command}", file=sys.stderr)
     
     # Handle commands
     if command == 'ytop':
@@ -931,7 +973,6 @@ def main():
         interval = 1
         if len(sys.argv) > 1 and sys.argv[1].isdigit():
             interval = int(sys.argv[1])
-        print(f"DEBUG: Running ytop with interval {interval}", file=sys.stderr)
         ytop.run(interval)
         
     elif command == 'ylog':
