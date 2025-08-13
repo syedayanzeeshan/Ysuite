@@ -890,61 +890,68 @@ def install_suite():
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description='YSuite - Rock 5B+ Monitoring Suite')
-    parser.add_argument('command', nargs='?', help='Command to run')
-    parser.add_argument('--install', action='store_true', help='Install YSuite system-wide')
-    parser.add_argument('--monitor', action='store_true', help='Start monitoring mode')
-    parser.add_argument('--summary', action='store_true', help='Show summary')
-    parser.add_argument('--negotiate', action='store_true', help='Negotiate PD')
-    parser.add_argument('args', nargs='*', help='Additional arguments')
+    # Detect which command was called
+    script_name = Path(sys.argv[0]).name
     
-    args = parser.parse_args()
+    # If called via symlink, use the symlink name as the command
+    if script_name in ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp']:
+        command = script_name
+        # Remove the script name from sys.argv so argparse doesn't see it as an argument
+        sys.argv = [sys.argv[0]] + sys.argv[1:]
+    else:
+        # Called directly as ysuite.py, use first argument as command
+        command = sys.argv[1] if len(sys.argv) > 1 else None
     
     # Initialize suite
     suite = YSuite()
     
-    if args.install:
+    # Handle installation
+    if '--install' in sys.argv:
         install_suite()
         return
     
-    if not args.command:
+    # If no command specified, show help
+    if not command:
         show_help()
         return
     
     # Handle commands
-    if args.command == 'ytop':
+    if command == 'ytop':
         ytop = YTop()
-        interval = int(args.args[0]) if args.args else 1
+        # Check for interval argument
+        interval = 1
+        if len(sys.argv) > 1 and sys.argv[1].isdigit():
+            interval = int(sys.argv[1])
         ytop.run(interval)
         
-    elif args.command == 'ylog':
+    elif command == 'ylog':
         ylog = YLog()
-        if args.monitor:
+        if '--monitor' in sys.argv or '-r' in sys.argv:
             ylog.monitor_logs()
         else:
             ylog.show_summary()
             
-    elif args.command == 'ycrash':
+    elif command == 'ycrash':
         ycrash = YCrash()
-        if args.monitor:
+        if '--monitor' in sys.argv or '-r' in sys.argv:
             ycrash.monitor_crashes()
         else:
             ycrash.show_summary()
             
-    elif args.command == 'ypower':
+    elif command == 'ypower':
         ypower = YPower()
-        if args.negotiate:
+        if '--negotiate' in sys.argv or '-n' in sys.argv:
             ypower.negotiate_3a_current()
-        elif args.monitor:
+        elif '--monitor' in sys.argv or '-r' in sys.argv:
             ypower.monitor_power()
         else:
             ypower.monitor_power()  # Default to monitoring
             
-    elif args.command == 'yhelp':
+    elif command == 'yhelp':
         show_help()
         
     else:
-        print(f"{Colors.RED}Unknown command: {args.command}{Colors.END}")
+        print(f"{Colors.RED}Unknown command: {command}{Colors.END}")
         show_help()
 
 if __name__ == '__main__':
