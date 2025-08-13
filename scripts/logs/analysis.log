@@ -1,4 +1,0 @@
-2025-07-30 15:55:42 | CRITICAL | __main__:log_error:118 | Kernel panic: unable to mount root filesystem | Context: {'component': 'filesystem', 'board': 'radxa-rock5b+'}
-2025-07-30 15:55:42 | ERROR | __main__:log_error:120 | Module not found: xyz_driver | Context: {'component': 'driver', 'module': 'xyz_driver'}
-2025-07-30 15:55:42 | WARNING | __main__:log_error:122 | Deprecated API used in driver | Context: {'component': 'driver', 'api': 'deprecated_function'}
-2025-07-30 15:55:54 | CRITICAL | kernel_log_analyzer:log_error:118 | Build monitor error: [Errno 2] No such file or directory: '../linux' | Context: None

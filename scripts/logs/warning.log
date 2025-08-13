@@ -1,1 +1,0 @@
-{"timestamp": "2025-07-30T15:55:42.836274", "message": "Deprecated API used in driver", "criticality": "warning", "context": {"component": "driver", "api": "deprecated_function"}}

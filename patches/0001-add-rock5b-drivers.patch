@@ -1,9 +1,0 @@
-diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
---- a/drivers/misc/Kconfig
-+++ b/drivers/misc/Kconfig
-
-
-diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
---- a/drivers/misc/Makefile
-+++ b/drivers/misc/Makefile
-

@@ -1,8 +1,0 @@
-# Disable Zink support for Mali GPU driver
-LIBGL_KOPPER_DISABLE=true
-
-# Environment variables for kernel logging system
-KERNEL_LOG_PATH=/var/log/kernel
-KERNEL_LOG_LEVEL=debug
-KERNEL_LOG_MAX_SIZE=100M
-KERNEL_LOG_ROTATE_COUNT=5
