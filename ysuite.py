@@ -890,17 +890,23 @@ def install_suite():
 
 def main():
     """Main entry point"""
+    # Debug: Print what we're receiving
+    print(f"DEBUG: sys.argv = {sys.argv}", file=sys.stderr)
+    
     # Detect which command was called
     script_name = Path(sys.argv[0]).name
+    print(f"DEBUG: script_name = {script_name}", file=sys.stderr)
     
     # If called via symlink, use the symlink name as the command
     if script_name in ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp']:
         command = script_name
-        # Remove the script name from sys.argv so argparse doesn't see it as an argument
+        print(f"DEBUG: Command detected via symlink: {command}", file=sys.stderr)
+        # Remove the script name from sys.argv so subsequent parsing doesn't see it as an argument
         sys.argv = [sys.argv[0]] + sys.argv[1:]
     else:
         # Called directly as ysuite.py, use first argument as command
         command = sys.argv[1] if len(sys.argv) > 1 else None
+        print(f"DEBUG: Command from argument: {command}", file=sys.stderr)
     
     # Initialize suite
     suite = YSuite()
@@ -912,8 +918,11 @@ def main():
     
     # If no command specified, show help
     if not command:
+        print(f"DEBUG: No command specified, showing help", file=sys.stderr)
         show_help()
         return
+    
+    print(f"DEBUG: Executing command: {command}", file=sys.stderr)
     
     # Handle commands
     if command == 'ytop':
@@ -922,6 +931,7 @@ def main():
         interval = 1
         if len(sys.argv) > 1 and sys.argv[1].isdigit():
             interval = int(sys.argv[1])
+        print(f"DEBUG: Running ytop with interval {interval}", file=sys.stderr)
         ytop.run(interval)
         
     elif command == 'ylog':
