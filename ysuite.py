@@ -285,12 +285,12 @@ class YTop:
     def get_gpu_info(self):
         """Get GPU load and frequency"""
         try:
-            # GPU load
-            with open('/sys/class/devfreq/fb000000.gpu/load', 'r') as f:
+            # GPU load - updated for Mali driver
+            with open('/sys/class/devfreq/fb000000.gpu-mali/load', 'r') as f:
                 load = int(f.read().strip())
                 
-            # GPU frequency
-            with open('/sys/class/devfreq/fb000000.gpu/cur_freq', 'r') as f:
+            # GPU frequency - updated for Mali driver
+            with open('/sys/class/devfreq/fb000000.gpu-mali/cur_freq', 'r') as f:
                 freq = int(f.read().strip()) // 1000000  # Convert to MHz
                 
             return {'load': load, 'freq': freq}
@@ -409,6 +409,8 @@ class YTop:
                 gpu_info = self.get_gpu_info()
                 power_info = self.get_power_info()
                 watchdog_info = self.get_watchdog_info()
+                opencl_info = self.get_opencl_info()
+                vulkan_info = self.get_vulkan_info()
                 
                 # Display header
                 print(f"{Colors.BOLD}{Colors.CYAN}YSuite - Rock 5B+ System Monitor{Colors.END}")
@@ -445,6 +447,17 @@ class YTop:
                 gpu_bar = self.create_bar(gpu_info['load'], 20)
                 print(f"Load: {gpu_info['load']:5.1f}% | Freq: {gpu_info['freq']:4d} MHz")
                 print(f"{gpu_bar}")
+                
+                # OpenCL and Vulkan Information
+                print(f"\n{Colors.BOLD}{Colors.MAGENTA}GPU Compute:{Colors.END}")
+                if opencl_info['available']:
+                    print(f"  OpenCL: ✅ {opencl_info['platform']} ({opencl_info['version']})")
+                else:
+                    print(f"  OpenCL: ❌ Not available")
+                if vulkan_info['available']:
+                    print(f"  Vulkan: ✅ {vulkan_info['driver']}")
+                else:
+                    print(f"  Vulkan: ❌ Not available")
                 
                 # Temperature and Sensors
                 print(f"\n{Colors.BOLD}{Colors.RED}Temperature & Sensors:{Colors.END}")
@@ -911,6 +924,40 @@ class YPower:
         # Save to file
         with open(self.power_file, 'w') as f:
             json.dump(power_data, f, indent=2)
+
+    def get_opencl_info(self):
+        """Get OpenCL information"""
+        try:
+            import subprocess
+            result = subprocess.run(['clinfo'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                # Parse OpenCL info
+                output = result.stdout
+                if 'ARM Platform' in output:
+                    return {
+                        'available': True,
+                        'platform': 'ARM Platform',
+                        'version': 'OpenCL 3.0 (Mali)'
+                    }
+            return {'available': False, 'platform': 'None', 'version': 'None'}
+        except:
+            return {'available': False, 'platform': 'None', 'version': 'None'}
+    
+    def get_vulkan_info(self):
+        """Get Vulkan information"""
+        try:
+            import subprocess
+            result = subprocess.run(['vulkaninfo', '--summary'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                output = result.stdout
+                if 'Mali' in output or 'ARM' in output:
+                    return {
+                        'available': True,
+                        'driver': 'Mali Vulkan Driver'
+                    }
+            return {'available': False, 'driver': 'None'}
+        except:
+            return {'available': False, 'driver': 'None'}
 
 def show_help():
     """Show comprehensive help for YSuite"""
