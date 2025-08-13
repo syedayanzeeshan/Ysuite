@@ -1,59 +1,37 @@
 #!/bin/bash
-
 # YSuite Installation Script
 # Comprehensive Rock 5B+ Monitoring and Management Suite
-
 set -e
-
 echo "YSuite - Rock 5B+ Monitoring Suite Installation"
 echo "================================================"
-
-# Check if running as root
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root (use sudo)"
     exit 1
 fi
-
-# Update package list
 echo "Updating package list..."
 apt update
-
-# Install system dependencies
 echo "Installing system dependencies..."
-apt install -y python3-pip python3-psutil python3-requests
-
-# Install Python dependencies
-echo "Installing Python dependencies..."
-pip3 install rich colorama
-
-# Create installation directory
-INSTALL_DIR="/usr/local/bin"
-echo "Installing YSuite to $INSTALL_DIR..."
-
-# Copy main script
-cp ysuite.py "$INSTALL_DIR/ysuite"
-chmod +x "$INSTALL_DIR/ysuite"
-
-# Create symlinks for individual commands
+apt install -y python3-pip python3-psutil python3-requests python3-rich python3-colorama
+echo "Installing Python dependencies via apt..."
+# Note: Using apt instead of pip3 to avoid externally-managed-environment error
+# python3-rich and python3-colorama should be available in Debian repositories
+echo "Installing YSuite to /usr/local/bin..."
+cp ysuite.py /usr/local/bin/ysuite
+chmod +x /usr/local/bin/ysuite
 echo "Creating command symlinks..."
-ln -sf "$INSTALL_DIR/ysuite" "$INSTALL_DIR/ytop"
-ln -sf "$INSTALL_DIR/ysuite" "$INSTALL_DIR/ylog"
-ln -sf "$INSTALL_DIR/ysuite" "$INSTALL_DIR/ycrash"
-ln -sf "$INSTALL_DIR/ysuite" "$INSTALL_DIR/ypower"
-ln -sf "$INSTALL_DIR/ysuite" "$INSTALL_DIR/yhelp"
-
-# Create data directories
+ln -sf /usr/local/bin/ysuite /usr/local/bin/ytop
+ln -sf /usr/local/bin/ysuite /usr/local/bin/ylog
+ln -sf /usr/local/bin/ysuite /usr/local/bin/ycrash
+ln -sf /usr/local/bin/ysuite /usr/local/bin/ypower
+ln -sf /usr/local/bin/ysuite /usr/local/bin/yhelp
 echo "Creating data directories..."
 mkdir -p /var/log/ysuite
 mkdir -p /var/lib/ysuite/data
 mkdir -p /etc/ysuite
-
-# Set permissions
 chmod 755 /var/log/ysuite
 chmod 755 /var/lib/ysuite
 chmod 755 /var/lib/ysuite/data
 chmod 755 /etc/ysuite
-
 echo ""
 echo "✅ YSuite installation completed successfully!"
 echo ""
