@@ -53,34 +53,181 @@ class YTop:
     
     def __init__(self):
         self.running = False
+        self.crash_count = 0
+        self.watchdog_resets = 0
         
     def get_cpu_info(self):
-        """Get CPU load and frequency information"""
+        """Get CPU load and frequency information for each core"""
         try:
-            # CPU load from /proc/stat
-            with open('/proc/stat', 'r') as f:
-                lines = f.readlines()
-                cpu_line = lines[0].split()[1:]
-                total = sum(int(x) for x in cpu_line)
-                idle = int(cpu_line[3])
-                load = 100 - (idle * 100 / total)
-                
-            # CPU frequency
-            freq = 0
+            cpu_info = {'cores': [], 'total_load': 0, 'avg_freq': 0}
+            
+            # Get individual core information
             for i in range(8):  # Rock 5B has 8 cores
                 try:
+                    # CPU load for each core
+                    with open(f'/proc/stat', 'r') as f:
+                        lines = f.readlines()
+                        if i + 1 < len(lines):  # cpu0, cpu1, etc.
+                            cpu_line = lines[i + 1].split()[1:]
+                            total = sum(int(x) for x in cpu_line)
+                            idle = int(cpu_line[3])
+                            load = 100 - (idle * 100 / total)
+                        else:
+                            load = 0
+                    
+                    # CPU frequency for each core
                     with open(f'/sys/devices/system/cpu/cpu{i}/cpufreq/scaling_cur_freq', 'r') as f:
-                        freq += int(f.read().strip())
+                        freq = int(f.read().strip()) // 1000  # Convert to MHz
+                    
+                    cpu_info['cores'].append({
+                        'core': i,
+                        'load': round(load, 1),
+                        'freq': freq
+                    })
                 except:
-                    break
-            freq = freq // 8  # Average frequency
+                    cpu_info['cores'].append({
+                        'core': i,
+                        'load': 0,
+                        'freq': 0
+                    })
+            
+            # Calculate total load and average frequency
+            total_load = sum(core['load'] for core in cpu_info['cores'])
+            avg_freq = sum(core['freq'] for core in cpu_info['cores']) // len(cpu_info['cores'])
+            
+            cpu_info['total_load'] = round(total_load / len(cpu_info['cores']), 1)
+            cpu_info['avg_freq'] = avg_freq
+            
+            return cpu_info
+        except:
+            return {'cores': [], 'total_load': 0, 'avg_freq': 0}
+    
+    def get_sensor_info(self):
+        """Get sensor information from various sources"""
+        sensors = {}
+        
+        try:
+            # Temperature sensors
+            for i in range(10):  # Check multiple thermal zones
+                try:
+                    with open(f'/sys/class/thermal/thermal_zone{i}/temp', 'r') as f:
+                        temp = int(f.read().strip()) / 1000
+                        sensors[f'temp_zone{i}'] = round(temp, 1)
+                except:
+                    continue
+            
+            # Fan sensors
+            try:
+                with open('/sys/class/thermal/cooling_device0/cur_state', 'r') as f:
+                    fan_state = int(f.read().strip())
+                    sensors['fan_state'] = fan_state
+            except:
+                sensors['fan_state'] = 0
+            
+            # Voltage sensors (ADC)
+            try:
+                with open('/sys/devices/platform/fec10000.saradc/iio:device0/in_voltage6_raw', 'r') as f:
+                    adc_raw = int(f.read().strip())
+                    # Convert to voltage (approximate conversion)
+                    voltage = (adc_raw / 4095) * 3.3
+                    sensors['adc_voltage'] = round(voltage, 2)
+            except:
+                sensors['adc_voltage'] = 0
+            
+            return sensors
+        except:
+            return {}
+    
+    def get_memory_info(self):
+        """Get detailed memory usage information"""
+        try:
+            with open('/proc/meminfo', 'r') as f:
+                lines = f.readlines()
+                mem_info = {}
+                for line in lines:
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        mem_info[key.strip()] = int(value.split()[0])
+                        
+            total = mem_info['MemTotal']
+            available = mem_info['MemAvailable']
+            used = total - available
+            usage_percent = (used / total) * 100
+            
+            # Get swap information
+            swap_total = mem_info.get('SwapTotal', 0)
+            swap_free = mem_info.get('SwapFree', 0)
+            swap_used = swap_total - swap_free
+            swap_usage_percent = (swap_used / swap_total * 100) if swap_total > 0 else 0
             
             return {
-                'load': round(load, 1),
-                'freq': freq // 1000  # Convert to MHz
+                'total': total // 1024,  # MB
+                'used': used // 1024,    # MB
+                'available': available // 1024,  # MB
+                'usage_percent': round(usage_percent, 1),
+                'swap_total': swap_total // 1024,  # MB
+                'swap_used': swap_used // 1024,    # MB
+                'swap_usage_percent': round(swap_usage_percent, 1)
             }
         except:
-            return {'load': 0, 'freq': 0}
+            return {'total': 0, 'used': 0, 'available': 0, 'usage_percent': 0, 'swap_total': 0, 'swap_used': 0, 'swap_usage_percent': 0}
+    
+    def get_npu_info(self):
+        """Get NPU information for all cores"""
+        npu_info = {'cores': [], 'total_load': 0, 'avg_freq': 0}
+        
+        try:
+            # NPU frequency
+            with open('/sys/class/devfreq/fdab0000.npu/cur_freq', 'r') as f:
+                npu_freq = int(f.read().strip()) // 1000000  # Convert to MHz
+            
+            # Try to get individual NPU core loads
+            for i in range(3):  # NPU1, NPU2, NPU3
+                try:
+                    # Try different possible paths for NPU core loads
+                    npu_load = 0
+                    
+                    # Method 1: Direct debug path
+                    try:
+                        result = subprocess.run(['sudo', 'cat', f'/sys/kernel/debug/rknpu/npu{i+1}_load'], 
+                                              capture_output=True, text=True, timeout=1)
+                        if result.returncode == 0:
+                            npu_load = int(result.stdout.strip())
+                    except:
+                        pass
+                    
+                    # Method 2: Alternative debug path
+                    if npu_load == 0:
+                        try:
+                            result = subprocess.run(['sudo', 'cat', '/sys/kernel/debug/rknpu/load'], 
+                                                  capture_output=True, text=True, timeout=1)
+                            if result.returncode == 0:
+                                # If we can't get individual loads, divide total by 3
+                                total_load = int(result.stdout.strip())
+                                npu_load = total_load // 3
+                        except:
+                            pass
+                    
+                    npu_info['cores'].append({
+                        'core': f'NPU{i+1}',
+                        'load': npu_load,
+                        'freq': npu_freq
+                    })
+                except:
+                    npu_info['cores'].append({
+                        'core': f'NPU{i+1}',
+                        'load': 0,
+                        'freq': npu_freq
+                    })
+            
+            # Calculate total load
+            total_load = sum(core['load'] for core in npu_info['cores'])
+            npu_info['total_load'] = total_load
+            npu_info['avg_freq'] = npu_freq
+            
+            return npu_info
+        except:
+            return {'cores': [], 'total_load': 0, 'avg_freq': 0}
     
     def get_gpu_info(self):
         """Get GPU load and frequency"""
@@ -97,147 +244,199 @@ class YTop:
         except:
             return {'load': 0, 'freq': 0}
     
-    def get_npu_info(self):
-        """Get NPU load and frequency"""
+    def get_power_info(self):
+        """Get power, voltage, and current information"""
+        power_info = {}
+        
         try:
-            # NPU load
-            result = subprocess.run(['sudo', 'cat', '/sys/kernel/debug/rknpu/load'], 
-                                  capture_output=True, text=True)
-            load = int(result.stdout.strip()) if result.returncode == 0 else 0
+            # USB-C PD information
+            try:
+                with open('/sys/class/power_supply/usb-c0/voltage_now', 'r') as f:
+                    voltage = int(f.read().strip()) / 1000000  # Convert to V
+                    power_info['pd_voltage'] = round(voltage, 2)
+            except:
+                power_info['pd_voltage'] = 0
             
-            # NPU frequency
-            with open('/sys/class/devfreq/fdab0000.npu/cur_freq', 'r') as f:
-                freq = int(f.read().strip()) // 1000000  # Convert to MHz
-                
-            return {'load': load, 'freq': freq}
+            try:
+                with open('/sys/class/power_supply/usb-c0/current_now', 'r') as f:
+                    current = int(f.read().strip()) / 1000  # Convert to mA
+                    power_info['pd_current'] = round(current, 1)
+            except:
+                power_info['pd_current'] = 0
+            
+            # Calculate power if both voltage and current are available
+            if power_info['pd_voltage'] > 0 and power_info['pd_current'] > 0:
+                power_info['pd_power'] = round(power_info['pd_voltage'] * power_info['pd_current'] / 1000, 2)  # W
+            else:
+                power_info['pd_power'] = 0
+            
+            # ADC voltage (backup method)
+            try:
+                with open('/sys/devices/platform/fec10000.saradc/iio:device0/in_voltage6_raw', 'r') as f:
+                    adc_raw = int(f.read().strip())
+                    voltage = (adc_raw / 4095) * 3.3
+                    power_info['adc_voltage'] = round(voltage, 2)
+            except:
+                power_info['adc_voltage'] = 0
+            
+            # Estimate current based on system load if PD current is not available
+            if power_info['pd_current'] == 0:
+                # Rough estimation based on CPU load
+                cpu_info = self.get_cpu_info()
+                estimated_current = (cpu_info['total_load'] / 100) * 2000  # Max ~2A at full load
+                power_info['estimated_current'] = round(estimated_current, 1)
+            else:
+                power_info['estimated_current'] = power_info['pd_current']
+            
+            return power_info
         except:
-            return {'load': 0, 'freq': 0}
+            return {'pd_voltage': 0, 'pd_current': 0, 'pd_power': 0, 'adc_voltage': 0, 'estimated_current': 0}
     
-    def get_memory_info(self):
-        """Get memory usage information"""
+    def get_watchdog_info(self):
+        """Get watchdog resets and crash counts"""
         try:
-            with open('/proc/meminfo', 'r') as f:
-                lines = f.readlines()
-                mem_info = {}
-                for line in lines:
-                    if ':' in line:
-                        key, value = line.split(':', 1)
-                        mem_info[key.strip()] = int(value.split()[0])
-                        
-            total = mem_info['MemTotal']
-            available = mem_info['MemAvailable']
-            used = total - available
-            usage_percent = (used / total) * 100
+            # Check watchdog status
+            try:
+                with open('/proc/watchdog', 'r') as f:
+                    watchdog_status = f.read().strip()
+            except:
+                watchdog_status = "Not available"
+            
+            # Check for crash logs
+            crash_count = 0
+            try:
+                # Check dmesg for crash indicators
+                result = subprocess.run(['dmesg', '-T'], capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    crash_indicators = ['Kernel panic', 'Oops', 'segfault', 'crash', 'watchdog']
+                    for line in result.stdout.split('\n'):
+                        if any(indicator in line.lower() for indicator in crash_indicators):
+                            crash_count += 1
+            except:
+                pass
+            
+            # Check system logs for crashes
+            try:
+                result = subprocess.run(['journalctl', '--since', '1 hour ago', '--no-pager'], 
+                                      capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    crash_indicators = ['crash', 'panic', 'segfault', 'killed']
+                    for line in result.stdout.split('\n'):
+                        if any(indicator in line.lower() for indicator in crash_indicators):
+                            crash_count += 1
+            except:
+                pass
             
             return {
-                'total': total // 1024,  # MB
-                'used': used // 1024,    # MB
-                'usage_percent': round(usage_percent, 1)
+                'watchdog_status': watchdog_status,
+                'crash_count': crash_count,
+                'watchdog_resets': self.watchdog_resets
             }
         except:
-            return {'total': 0, 'used': 0, 'usage_percent': 0}
+            return {'watchdog_status': 'Unknown', 'crash_count': 0, 'watchdog_resets': 0}
     
-    def get_temperature(self):
-        """Get system temperature"""
-        try:
-            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
-                temp = int(f.read().strip()) / 1000  # Convert to Celsius
-            return round(temp, 1)
-        except:
-            return 0
-    
-    def get_fan_speed(self):
-        """Get fan speed"""
-        try:
-            with open('/sys/class/thermal/cooling_device4/cur_state', 'r') as f:
-                speed = int(f.read().strip())
-            return speed
-        except:
-            return 0
-    
-    def create_bar(self, value, max_value, width=20):
+    def create_bar(self, percentage, width=20):
         """Create a visual progress bar"""
-        filled = int((value / max_value) * width)
+        filled = int(width * percentage / 100)
         bar = '█' * filled + '░' * (width - filled)
         return bar
     
-    def display_stats(self):
-        """Display real-time system statistics"""
-        os.system('clear')
-        
-        # Get all system information
-        cpu = self.get_cpu_info()
-        gpu = self.get_gpu_info()
-        npu = self.get_npu_info()
-        memory = self.get_memory_info()
-        temp = self.get_temperature()
-        fan = self.get_fan_speed()
-        
-        # Header
-        print(f"{Colors.BOLD}{Colors.CYAN}╔══════════════════════════════════════════════════════════════════════════════╗{Colors.END}")
-        print(f"{Colors.BOLD}{Colors.CYAN}║                           YSuite - Real-time System Monitor                    ║{Colors.END}")
-        print(f"{Colors.BOLD}{Colors.CYAN}║                              Rock 5B+ Performance Dashboard                      ║{Colors.END}")
-        print(f"{Colors.BOLD}{Colors.CYAN}╚══════════════════════════════════════════════════════════════════════════════╝{Colors.END}")
-        print()
-        
-        # CPU Section
-        print(f"{Colors.BOLD}{Colors.YELLOW}🖥️  CPU Information:{Colors.END}")
-        cpu_bar = self.create_bar(cpu['load'], 100)
-        print(f"   Load:    {cpu['load']:5.1f}% {cpu_bar} {Colors.GREEN}{cpu['load']:5.1f}%{Colors.END}")
-        print(f"   Frequency: {cpu['freq']:4d} MHz")
-        print()
-        
-        # GPU Section
-        print(f"{Colors.BOLD}{Colors.MAGENTA}🎮 GPU Information:{Colors.END}")
-        gpu_bar = self.create_bar(gpu['load'], 100)
-        print(f"   Load:    {gpu['load']:5d}% {gpu_bar} {Colors.GREEN}{gpu['load']:5d}%{Colors.END}")
-        print(f"   Frequency: {gpu['freq']:4d} MHz")
-        print()
-        
-        # NPU Section
-        print(f"{Colors.BOLD}{Colors.BLUE}🧠 NPU Information:{Colors.END}")
-        npu_bar = self.create_bar(npu['load'], 100)
-        print(f"   Load:    {npu['load']:5d}% {npu_bar} {Colors.GREEN}{npu['load']:5d}%{Colors.END}")
-        print(f"   Frequency: {npu['freq']:4d} MHz")
-        print()
-        
-        # Memory Section
-        print(f"{Colors.BOLD}{Colors.CYAN}💾 Memory Information:{Colors.END}")
-        mem_bar = self.create_bar(memory['usage_percent'], 100)
-        print(f"   Usage:   {memory['usage_percent']:5.1f}% {mem_bar} {Colors.GREEN}{memory['usage_percent']:5.1f}%{Colors.END}")
-        print(f"   Used:    {memory['used']:5d} MB / {memory['total']:5d} MB")
-        print()
-        
-        # Temperature and Fan
-        print(f"{Colors.BOLD}{Colors.RED}🌡️  System Status:{Colors.END}")
-        temp_color = Colors.RED if temp > 70 else Colors.YELLOW if temp > 50 else Colors.GREEN
-        print(f"   Temperature: {temp_color}{temp:5.1f}°C{Colors.END}")
-        print(f"   Fan Speed:    {fan:5d} (0-255)")
-        print()
-        
-        # Footer
-        print(f"{Colors.BOLD}{Colors.CYAN}╔══════════════════════════════════════════════════════════════════════════════╗{Colors.END}")
-        print(f"{Colors.BOLD}{Colors.CYAN}║  Press Ctrl+C to exit | YSuite v{SUITE_VERSION} | {datetime.now().strftime('%H:%M:%S')} ║{Colors.END}")
-        print(f"{Colors.BOLD}{Colors.CYAN}╚══════════════════════════════════════════════════════════════════════════════╝{Colors.END}")
+    def display_stats(self, interval=1):
+        """Display comprehensive system statistics"""
+        while self.running:
+            try:
+                # Clear screen
+                os.system('clear')
+                
+                # Get all system information
+                cpu_info = self.get_cpu_info()
+                sensor_info = self.get_sensor_info()
+                mem_info = self.get_memory_info()
+                npu_info = self.get_npu_info()
+                gpu_info = self.get_gpu_info()
+                power_info = self.get_power_info()
+                watchdog_info = self.get_watchdog_info()
+                
+                # Display header
+                print(f"{Colors.BOLD}{Colors.CYAN}YSuite - Rock 5B+ System Monitor{Colors.END}")
+                print(f"{Colors.YELLOW}Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.END}")
+                print("=" * 60)
+                
+                # CPU Information
+                print(f"\n{Colors.BOLD}{Colors.GREEN}CPU Information:{Colors.END}")
+                print(f"Total Load: {cpu_info['total_load']}% | Avg Freq: {cpu_info['avg_freq']} MHz")
+                print(f"{self.create_bar(cpu_info['total_load'])}")
+                
+                # Individual CPU cores
+                print(f"\n{Colors.BOLD}Individual Cores:{Colors.END}")
+                for core in cpu_info['cores']:
+                    bar = self.create_bar(core['load'], 15)
+                    print(f"  Core {core['core']}: {core['load']:5.1f}% | {core['freq']:4d} MHz | {bar}")
+                
+                # Memory Information
+                print(f"\n{Colors.BOLD}{Colors.BLUE}Memory Information:{Colors.END}")
+                print(f"RAM: {mem_info['used']}/{mem_info['total']} MB ({mem_info['usage_percent']}%)")
+                print(f"{self.create_bar(mem_info['usage_percent'])}")
+                if mem_info['swap_total'] > 0:
+                    print(f"Swap: {mem_info['swap_used']}/{mem_info['swap_total']} MB ({mem_info['swap_usage_percent']}%)")
+                
+                # NPU Information
+                print(f"\n{Colors.BOLD}{Colors.MAGENTA}NPU Information:{Colors.END}")
+                print(f"Total Load: {npu_info['total_load']}% | Freq: {npu_info['avg_freq']} MHz")
+                for core in npu_info['cores']:
+                    bar = self.create_bar(core['load'], 15)
+                    print(f"  {core['core']}: {core['load']:5.1f}% | {core['freq']:4d} MHz | {bar}")
+                
+                # GPU Information
+                print(f"\n{Colors.BOLD}{Colors.YELLOW}GPU Information:{Colors.END}")
+                gpu_bar = self.create_bar(gpu_info['load'], 20)
+                print(f"Load: {gpu_info['load']:5.1f}% | Freq: {gpu_info['freq']:4d} MHz")
+                print(f"{gpu_bar}")
+                
+                # Temperature and Sensors
+                print(f"\n{Colors.BOLD}{Colors.RED}Temperature & Sensors:{Colors.END}")
+                for sensor, value in sensor_info.items():
+                    if 'temp' in sensor:
+                        print(f"  {sensor}: {value}°C")
+                    elif 'fan' in sensor:
+                        print(f"  Fan State: {value}")
+                    elif 'adc' in sensor:
+                        print(f"  ADC Voltage: {value}V")
+                
+                # Power Information
+                print(f"\n{Colors.BOLD}{Colors.CYAN}Power Information:{Colors.END}")
+                if power_info['pd_voltage'] > 0:
+                    print(f"  PD Voltage: {power_info['pd_voltage']}V")
+                    print(f"  PD Current: {power_info['pd_current']}mA")
+                    print(f"  PD Power: {power_info['pd_power']}W")
+                if power_info['adc_voltage'] > 0:
+                    print(f"  ADC Voltage: {power_info['adc_voltage']}V")
+                if power_info['estimated_current'] > 0:
+                    print(f"  Estimated Current: {power_info['estimated_current']}mA")
+                
+                # Watchdog and Crash Information
+                print(f"\n{Colors.BOLD}{Colors.RED}System Health:{Colors.END}")
+                print(f"  Watchdog Status: {watchdog_info['watchdog_status']}")
+                print(f"  Crash Count: {watchdog_info['crash_count']}")
+                print(f"  Watchdog Resets: {watchdog_info['watchdog_resets']}")
+                
+                # Footer
+                print(f"\n{Colors.YELLOW}Press Ctrl+C to exit{Colors.END}")
+                
+                time.sleep(interval)
+                
+            except KeyboardInterrupt:
+                self.running = False
+                print(f"\n{Colors.GREEN}Monitoring stopped.{Colors.END}")
+                break
+            except Exception as e:
+                print(f"{Colors.RED}Error: {e}{Colors.END}")
+                time.sleep(interval)
     
     def run(self, interval=1):
-        """Run the real-time monitor"""
+        """Start the monitoring"""
         self.running = True
-        
-        def signal_handler(signum, frame):
-            self.running = False
-            print(f"\n{Colors.YELLOW}YTop monitoring stopped.{Colors.END}")
-            sys.exit(0)
-            
-        signal.signal(signal.SIGINT, signal_handler)
-        
-        try:
-            while self.running:
-                self.display_stats()
-                time.sleep(interval)
-        except KeyboardInterrupt:
-            self.running = False
-            print(f"\n{Colors.YELLOW}YTop monitoring stopped.{Colors.END}")
+        self.display_stats(interval)
 
 class YLog:
     """System log monitoring and classification"""
