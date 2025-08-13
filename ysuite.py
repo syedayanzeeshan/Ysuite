@@ -42,39 +42,11 @@ class Colors:
 class YSuite:
     def __init__(self):
         self.setup_directories()
-        self.check_dependencies()
         
     def setup_directories(self):
         """Create necessary directories for the suite"""
         for directory in [BASE_DIR, LOG_DIR, CONFIG_DIR, DATA_DIR]:
             directory.mkdir(parents=True, exist_ok=True)
-            
-    def check_dependencies(self):
-        """Check and install required dependencies"""
-        required_packages = [
-            'psutil', 'rich', 'colorama', 'requests'
-        ]
-        
-        missing_packages = []
-        for package in required_packages:
-            try:
-                __import__(package)
-            except ImportError:
-                missing_packages.append(package)
-                
-        if missing_packages:
-            print(f"{Colors.YELLOW}Installing missing dependencies: {', '.join(missing_packages)}{Colors.END}")
-            self.install_dependencies(missing_packages)
-            
-    def install_dependencies(self, packages):
-        """Install Python dependencies using pip"""
-        try:
-            subprocess.run([sys.executable, '-m', 'pip', 'install'] + packages, 
-                         check=True, capture_output=True)
-            print(f"{Colors.GREEN}Dependencies installed successfully!{Colors.END}")
-        except subprocess.CalledProcessError as e:
-            print(f"{Colors.RED}Failed to install dependencies: {e}{Colors.END}")
-            sys.exit(1)
 
 class YTop:
     """Real-time system performance monitor (CLI version of rtop)"""
