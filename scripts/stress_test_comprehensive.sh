@@ -499,3 +499,6 @@ echo ""
 echo "📊 Check ytop_output.log for detailed monitoring data"
 echo "🔥 System stress tested with OpenCL and Vulkan workloads"
 echo "⚡ Power, temperature, and performance monitored in real-time"
+
+
+
