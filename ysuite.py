@@ -308,19 +308,19 @@ class YTop:
                 with open('/sys/kernel/debug/regulator/regulator_summary', 'r') as f:
                     lines = f.readlines()
                     for line in lines:
-                        if 'vcc12v_dcin' in line and 'unknown' in line:
+                        if 'vcc12v_dcin' in line and 'unknown' in line and '12000mV' in line:
                             parts = line.split()
                             if len(parts) >= 6:
                                 voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
                                 current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vcc12v_dcin'] = {'voltage': voltage, 'current': current}
-                        elif 'vcc5v0_sys' in line and 'unknown' in line:
+                        elif 'vcc5v0_sys' in line and 'unknown' in line and '5000mV' in line:
                             parts = line.split()
                             if len(parts) >= 6:
                                 voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
                                 current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vcc5v0_sys'] = {'voltage': voltage, 'current': current}
-                        elif 'vbus5v0_typec' in line and 'unknown' in line:
+                        elif 'vbus5v0_typec' in line and 'unknown' in line and '5000mV' in line:
                             parts = line.split()
                             if len(parts) >= 6:
                                 voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
