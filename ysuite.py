@@ -308,21 +308,21 @@ class YTop:
                 with open('/sys/kernel/debug/regulator/regulator_summary', 'r') as f:
                     lines = f.readlines()
                     for line in lines:
-                        if 'vcc12v_dcin' in line:
+                        if 'vcc12v_dcin' in line and 'unknown' in line:
                             parts = line.split()
-                            if len(parts) >= 5:
+                            if len(parts) >= 6:
                                 voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
                                 current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vcc12v_dcin'] = {'voltage': voltage, 'current': current}
-                        elif 'vcc5v0_sys' in line:
+                        elif 'vcc5v0_sys' in line and 'unknown' in line:
                             parts = line.split()
-                            if len(parts) >= 5:
+                            if len(parts) >= 6:
                                 voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
                                 current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vcc5v0_sys'] = {'voltage': voltage, 'current': current}
-                        elif 'vbus5v0_typec' in line:
+                        elif 'vbus5v0_typec' in line and 'unknown' in line:
                             parts = line.split()
-                            if len(parts) >= 5:
+                            if len(parts) >= 6:
                                 voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
                                 current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vbus5v0_typec'] = {'voltage': voltage, 'current': current}
@@ -340,6 +340,11 @@ class YTop:
                 power_info['current_input'] = regulator_data['vbus5v0_typec']['current']
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
                 power_info['power_source'] = 'USB-C PD'
+            elif 'vcc5v0_sys' in regulator_data:
+                power_info['voltage_input'] = regulator_data['vcc5v0_sys']['voltage']
+                power_info['current_input'] = regulator_data['vcc5v0_sys']['current']
+                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
+                power_info['power_source'] = '5V System'
             else:
                 # Fallback to ADC reading
                 max_voltage = 0
