@@ -329,22 +329,22 @@ class YTop:
             except:
                 pass
             
-            # Use regulator data if available
-            if 'vcc12v_dcin' in regulator_data:
+            # Use regulator data if available (prioritize by voltage)
+            if 'vcc12v_dcin' in regulator_data and regulator_data['vcc12v_dcin']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vcc12v_dcin']['voltage']
                 power_info['current_input'] = regulator_data['vcc12v_dcin']['current']
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = '12V DC Input'
-            elif 'vbus5v0_typec' in regulator_data:
+                power_info['power_source'] = '12V DC Input (Regulator)'
+            elif 'vbus5v0_typec' in regulator_data and regulator_data['vbus5v0_typec']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vbus5v0_typec']['voltage']
                 power_info['current_input'] = regulator_data['vbus5v0_typec']['current']
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = 'USB-C PD'
-            elif 'vcc5v0_sys' in regulator_data:
+                power_info['power_source'] = 'USB-C PD (Regulator)'
+            elif 'vcc5v0_sys' in regulator_data and regulator_data['vcc5v0_sys']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vcc5v0_sys']['voltage']
                 power_info['current_input'] = regulator_data['vcc5v0_sys']['current']
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = '5V System'
+                power_info['power_source'] = '5V System (Regulator)'
             else:
                 # Fallback to ADC reading
                 max_voltage = 0
@@ -934,27 +934,17 @@ class YPower:
         
         try:
             while True:
-                # Get power information
-                adc_voltage = self.get_adc_voltage()
+                # Get accurate power readings from YTop
+                ytop = YTop()
+                power_info = ytop.get_accurate_power_readings()
+                
+                voltage = power_info['voltage_input']
+                current = power_info['current_input']
+                power = power_info['power_input']
+                power_source = power_info['power_source']
+                
+                # Get PD information for display
                 pd_info = self.get_pd_info()
-                estimated_current = self.estimate_current()
-                
-                # Determine actual voltage and current
-                if pd_info['online'] and pd_info['voltage'] > 0:
-                    voltage = pd_info['voltage']
-                    current = pd_info['current'] / 1000  # Convert to A
-                    power_source = "USB PD"
-                elif adc_voltage > 0:
-                    voltage = adc_voltage
-                    current = estimated_current
-                    power_source = "ADC Reading"
-                else:
-                    voltage = 0
-                    current = 0
-                    power_source = "Unknown"
-                
-                # Calculate power
-                power = voltage * current
                 
                 # Display information
                 os.system('clear')
@@ -979,7 +969,7 @@ class YPower:
                 
                 # ADC Information
                 print(f"{Colors.BOLD}📊 ADC Reading:{Colors.END}")
-                print(f"   Raw ADC:    {adc_voltage:5.2f} V")
+                print(f"   Raw ADC:    {voltage:5.2f} V")
                 print()
                 
                 # Footer
