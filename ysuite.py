@@ -310,21 +310,21 @@ class YTop:
                     for line in lines:
                         if 'vcc12v_dcin' in line and 'unknown' in line and '12000mV' in line:
                             parts = line.split()
-                            if len(parts) >= 6:
-                                voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
-                                current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
+                            if len(parts) >= 7:
+                                voltage = int(parts[5].replace('mV', '')) / 1000.0  # Convert to V
+                                current = int(parts[6].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vcc12v_dcin'] = {'voltage': voltage, 'current': current}
                         elif 'vcc5v0_sys' in line and 'unknown' in line and '5000mV' in line:
                             parts = line.split()
-                            if len(parts) >= 6:
-                                voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
-                                current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
+                            if len(parts) >= 7:
+                                voltage = int(parts[5].replace('mV', '')) / 1000.0  # Convert to V
+                                current = int(parts[6].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vcc5v0_sys'] = {'voltage': voltage, 'current': current}
                         elif 'vbus5v0_typec' in line and 'unknown' in line and '5000mV' in line:
                             parts = line.split()
-                            if len(parts) >= 6:
-                                voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
-                                current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
+                            if len(parts) >= 7:
+                                voltage = int(parts[5].replace('mV', '')) / 1000.0  # Convert to V
+                                current = int(parts[6].replace('mA', '')) / 1000.0  # Convert to A
                                 regulator_data['vbus5v0_typec'] = {'voltage': voltage, 'current': current}
             except:
                 pass
