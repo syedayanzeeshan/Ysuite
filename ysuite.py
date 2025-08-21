@@ -19,7 +19,7 @@ import shutil
 import platform
 
 # Global configuration
-SUITE_VERSION = "1.0.0"
+SUITE_VERSION = "2.0.1"
 SUITE_NAME = "YSuite"
 BASE_DIR = Path("/opt/ysuite")
 LOG_DIR = BASE_DIR / "logs"
@@ -297,53 +297,80 @@ class YTop:
         except:
             return {'load': 0, 'freq': 0}
     
-    def get_power_info(self):
-        """Get power, voltage, and current information"""
+    def get_accurate_power_readings(self):
+        """Get accurate power readings from hardware sensors"""
         power_info = {}
         
         try:
-            # USB-C PD information
+            # Read from regulator summary for actual hardware values
+            regulator_data = {}
             try:
-                with open('/sys/class/power_supply/usb-c0/voltage_now', 'r') as f:
-                    voltage = int(f.read().strip()) / 1000000  # Convert to V
-                    power_info['pd_voltage'] = round(voltage, 2)
+                with open('/sys/kernel/debug/regulator/regulator_summary', 'r') as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        if 'vcc12v_dcin' in line:
+                            parts = line.split()
+                            if len(parts) >= 5:
+                                voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
+                                current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
+                                regulator_data['vcc12v_dcin'] = {'voltage': voltage, 'current': current}
+                        elif 'vcc5v0_sys' in line:
+                            parts = line.split()
+                            if len(parts) >= 5:
+                                voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
+                                current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
+                                regulator_data['vcc5v0_sys'] = {'voltage': voltage, 'current': current}
+                        elif 'vbus5v0_typec' in line:
+                            parts = line.split()
+                            if len(parts) >= 5:
+                                voltage = int(parts[4].replace('mV', '')) / 1000.0  # Convert to V
+                                current = int(parts[5].replace('mA', '')) / 1000.0  # Convert to A
+                                regulator_data['vbus5v0_typec'] = {'voltage': voltage, 'current': current}
             except:
-                power_info['pd_voltage'] = 0
+                pass
             
-            try:
-                with open('/sys/class/power_supply/usb-c0/current_now', 'r') as f:
-                    current = int(f.read().strip()) / 1000  # Convert to mA
-                    power_info['pd_current'] = round(current, 1)
-            except:
-                power_info['pd_current'] = 0
-            
-            # Calculate power if both voltage and current are available
-            if power_info['pd_voltage'] > 0 and power_info['pd_current'] > 0:
-                power_info['pd_power'] = round(power_info['pd_voltage'] * power_info['pd_current'] / 1000, 2)  # W
+            # Use regulator data if available
+            if 'vcc12v_dcin' in regulator_data:
+                power_info['voltage_input'] = regulator_data['vcc12v_dcin']['voltage']
+                power_info['current_input'] = regulator_data['vcc12v_dcin']['current']
+                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
+                power_info['power_source'] = '12V DC Input'
+            elif 'vbus5v0_typec' in regulator_data:
+                power_info['voltage_input'] = regulator_data['vbus5v0_typec']['voltage']
+                power_info['current_input'] = regulator_data['vbus5v0_typec']['current']
+                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
+                power_info['power_source'] = 'USB-C PD'
             else:
-                power_info['pd_power'] = 0
+                # Fallback to ADC reading
+                max_voltage = 0
+                for i in range(8):  # Check multiple ADC channels
+                    try:
+                        with open(f'/sys/bus/iio/devices/iio:device0/in_voltage{i}_raw', 'r') as f:
+                            adc_raw = int(f.read().strip())
+                            # Convert to voltage (assuming 3.3V reference)
+                            voltage = (adc_raw / 4095) * 3.3
+                            if voltage > max_voltage:
+                                max_voltage = voltage
+                    except:
+                        continue
+                
+                power_info['voltage_input'] = max_voltage * 3  # Voltage divider correction
+                power_info['current_input'] = 0  # No current sensor available
+                power_info['power_input'] = 0
+                power_info['power_source'] = 'ADC Reading'
             
-            # ADC voltage (backup method)
-            try:
-                with open('/sys/devices/platform/fec10000.saradc/iio:device0/in_voltage6_raw', 'r') as f:
-                    adc_raw = int(f.read().strip())
-                    voltage = (adc_raw / 4095) * 3.3 * 3  # Assuming 3.3V reference and voltage divider
-                    power_info['adc_voltage'] = round(voltage, 2)
-            except:
-                power_info['adc_voltage'] = 0
-            
-            # Estimate current based on system load if PD current is not available
-            if power_info['pd_current'] == 0:
-                # Rough estimation based on CPU load
-                cpu_info = self.get_cpu_info()
-                estimated_current = (cpu_info['total_load'] / 100) * 2000  # Max ~2A at full load
-                power_info['estimated_current'] = round(estimated_current, 1)
-            else:
-                power_info['estimated_current'] = power_info['pd_current']
+            # Round values
+            power_info['voltage_input'] = round(power_info['voltage_input'], 2)
+            power_info['current_input'] = round(power_info['current_input'], 2)
+            power_info['power_input'] = round(power_info['power_input'], 2)
             
             return power_info
         except:
-            return {'pd_voltage': 0, 'pd_current': 0, 'pd_power': 0, 'adc_voltage': 0, 'estimated_current': 0}
+            return {'voltage_input': 0, 'current_input': 0, 'power_input': 0, 'power_source': 'Unknown'}
+
+    def get_power_info(self):
+        """Get power, voltage, and current information (legacy method)"""
+        return self.get_accurate_power_readings()
     
     def get_watchdog_info(self):
         """Get watchdog resets and crash counts"""
@@ -540,14 +567,13 @@ class YTop:
                 
                 # Power Information
                 print(f"\n{Colors.BOLD}{Colors.CYAN}Power Information:{Colors.END}")
-                if power_info['pd_voltage'] > 0:
-                    print(f"  PD Voltage: {power_info['pd_voltage']}V")
-                    print(f"  PD Current: {power_info['pd_current']}mA")
-                    print(f"  PD Power: {power_info['pd_power']}W")
-                if power_info['adc_voltage'] > 0:
-                    print(f"  ADC Voltage: {power_info['adc_voltage']}V")
-                if power_info['estimated_current'] > 0:
-                    print(f"  Estimated Current: {power_info['estimated_current']}mA")
+                if power_info['voltage_input'] > 0:
+                    print(f"  Input Voltage: {power_info['voltage_input']}V")
+                    print(f"  Input Current: {power_info['current_input']}A")
+                    print(f"  Input Power: {power_info['power_input']}W")
+                    print(f"  Source: {power_info['power_source']}")
+                if power_info['voltage_input'] == 0 and power_info['current_input'] == 0:
+                    print(f"  No power source detected.")
                 
                 # Watchdog and Crash Information
                 print(f"\n{Colors.BOLD}{Colors.RED}System Health:{Colors.END}")
