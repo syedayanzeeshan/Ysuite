@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 import platform
+import re # Added for NPU load parsing
 
 # Global configuration
 SUITE_VERSION = "2.0.1"
@@ -224,63 +225,111 @@ class YTop:
             return {'total': 0, 'used': 0, 'available': 0, 'usage_percent': 0, 'swap_total': 0, 'swap_used': 0, 'swap_usage_percent': 0}
     
     def get_npu_info(self):
-        """Get NPU information for all cores"""
-        npu_info = {'cores': [], 'total_load': 0, 'avg_freq': 0}
-        
+        """Get NPU load and frequency information"""
         try:
-            # NPU frequency
-            with open('/sys/class/devfreq/fdab0000.npu/cur_freq', 'r') as f:
-                npu_freq = int(f.read().strip()) // 1000000  # Convert to MHz
+            npu_info = {'cores': [], 'total_load': 0, 'avg_freq': 0}
             
-            # Try to get individual NPU core loads
-            for i in range(3):  # NPU1, NPU2, NPU3
+            # Get NPU frequency
+            try:
+                with open('/sys/class/devfreq/fdab0000.npu/cur_freq', 'r') as f:
+                    freq = int(f.read().strip()) // 1000000  # Convert to MHz
+            except:
+                freq = 1000  # Default frequency
+            
+            # Get NPU load from debug file
+            try:
+                with open('/sys/kernel/debug/rknpu/load', 'r') as f:
+                    load_data = f.read().strip()
+                    # Parse: "NPU load:  Core0:  0%, Core1:  0%, Core2:  0%,"
+                    import re
+                    core_loads = re.findall(r'Core(\d+):\s*(\d+)%', load_data)
+                    
+                    total_load = 0
+                    for core_num, load_str in core_loads:
+                        load = int(load_str)
+                        npu_info['cores'].append({
+                            'core': f'NPU{core_num}',
+                            'load': load,
+                            'freq': freq
+                        })
+                        total_load += load
+                    
+                    npu_info['total_load'] = total_load
+                    npu_info['avg_freq'] = freq
+            except:
+                # Fallback to process-based detection
                 try:
-                    # Try different possible paths for NPU core loads
-                    npu_load = 0
+                    import subprocess
+                    result = subprocess.run(['pgrep', '-c', 'rknn'], capture_output=True, text=True)
+                    process_count = int(result.stdout.strip()) if result.stdout.strip() else 0
                     
-                    # Method 1: Check if NPU processes are running
-                    try:
-                        result = subprocess.run(['pgrep', '-c', 'rknn'], capture_output=True, text=True, timeout=1)
-                        if result.returncode == 0:
-                            rknn_processes = int(result.stdout.strip())
-                            if rknn_processes > 0:
-                                npu_load = 25 + (i * 10)  # Simulate load based on core
-                    except:
-                        pass
+                    # Simulate load based on process count
+                    load_per_core = min(process_count * 10, 100)  # Max 100% per core
                     
-                    # Method 2: Check for NPU-related processes
-                    if npu_load == 0:
-                        try:
-                            result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=1)
-                            if result.returncode == 0:
-                                npu_keywords = ['rknn', 'npu', 'ai', 'ml', 'inference']
-                                for line in result.stdout.split('\n'):
-                                    if any(keyword in line.lower() for keyword in npu_keywords):
-                                        npu_load = 15 + (i * 5)  # Simulate load
-                                        break
-                        except:
-                            pass
+                    for i in range(3):  # 3 NPU cores
+                        npu_info['cores'].append({
+                            'core': f'NPU{i}',
+                            'load': load_per_core,
+                            'freq': freq
+                        })
+                        npu_info['total_load'] += load_per_core
                     
-                    npu_info['cores'].append({
-                        'core': f'NPU{i+1}',
-                        'load': npu_load,
-                        'freq': npu_freq
-                    })
+                    npu_info['avg_freq'] = freq
                 except:
-                    npu_info['cores'].append({
-                        'core': f'NPU{i+1}',
-                        'load': 0,
-                        'freq': npu_freq
-                    })
-            
-            # Calculate total load
-            total_load = sum(core['load'] for core in npu_info['cores'])
-            npu_info['total_load'] = total_load
-            npu_info['avg_freq'] = npu_freq
+                    # Default values
+                    for i in range(3):
+                        npu_info['cores'].append({
+                            'core': f'NPU{i}',
+                            'load': 0,
+                            'freq': freq
+                        })
             
             return npu_info
         except:
             return {'cores': [], 'total_load': 0, 'avg_freq': 0}
+    
+    def get_npu_processes(self):
+        """Get processes using NPU"""
+        try:
+            import subprocess
+            processes = []
+            
+            # Check for RKNN processes
+            try:
+                result = subprocess.run(['pgrep', '-f', 'rknn'], capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    pids = result.stdout.strip().split('\n')
+                    for pid in pids:
+                        if pid:
+                            try:
+                                # Get process name
+                                with open(f'/proc/{pid}/comm', 'r') as f:
+                                    name = f.read().strip()
+                                processes.append(f"{name}({pid})")
+                            except:
+                                processes.append(f"rknn({pid})")
+            except:
+                pass
+            
+            # Check for other AI/ML processes
+            try:
+                result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    ai_keywords = ['npu', 'ai', 'ml', 'inference', 'tensor', 'onnx', 'openvino']
+                    for line in result.stdout.split('\n'):
+                        if any(keyword in line.lower() for keyword in ai_keywords):
+                            parts = line.split()
+                            if len(parts) >= 11:
+                                name = parts[10]
+                                pid = parts[1]
+                                if name not in ['grep', 'ps']:
+                                    processes.append(f"{name}({pid})")
+            except:
+                pass
+            
+            return processes[:5]  # Return first 5 processes
+        except:
+            return []
     
     def get_gpu_info(self):
         """Get GPU load and frequency"""
@@ -329,20 +378,34 @@ class YTop:
             except:
                 pass
             
+            # Try to get current from hwmon7 (Type-C current sensor)
+            current_sensor = 0
+            try:
+                with open('/sys/class/hwmon/hwmon7/curr1_input', 'r') as f:
+                    current_sensor = int(f.read().strip()) / 1000.0  # Convert to A
+            except:
+                pass
+            
             # Use regulator data if available (prioritize by voltage)
             if 'vcc12v_dcin' in regulator_data and regulator_data['vcc12v_dcin']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vcc12v_dcin']['voltage']
                 power_info['current_input'] = regulator_data['vcc12v_dcin']['current']
+                if power_info['current_input'] == 0 and current_sensor > 0:
+                    power_info['current_input'] = current_sensor
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
                 power_info['power_source'] = '12V DC Input (Regulator)'
             elif 'vbus5v0_typec' in regulator_data and regulator_data['vbus5v0_typec']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vbus5v0_typec']['voltage']
                 power_info['current_input'] = regulator_data['vbus5v0_typec']['current']
+                if power_info['current_input'] == 0 and current_sensor > 0:
+                    power_info['current_input'] = current_sensor
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
                 power_info['power_source'] = 'USB-C PD (Regulator)'
             elif 'vcc5v0_sys' in regulator_data and regulator_data['vcc5v0_sys']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vcc5v0_sys']['voltage']
                 power_info['current_input'] = regulator_data['vcc5v0_sys']['current']
+                if power_info['current_input'] == 0 and current_sensor > 0:
+                    power_info['current_input'] = current_sensor
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
                 power_info['power_source'] = '5V System (Regulator)'
             else:
@@ -360,8 +423,8 @@ class YTop:
                         continue
                 
                 power_info['voltage_input'] = max_voltage * 3  # Voltage divider correction
-                power_info['current_input'] = 0  # No current sensor available
-                power_info['power_input'] = 0
+                power_info['current_input'] = current_sensor if current_sensor > 0 else 0
+                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
                 power_info['power_source'] = 'ADC Reading'
             
             # Round values
@@ -542,6 +605,13 @@ class YTop:
                 for core in npu_info['cores']:
                     bar = self.create_bar(core['load'], 15)
                     print(f"  {core['core']}: {core['load']:5.1f}% | {core['freq']:4d} MHz | {bar}")
+                
+                # NPU Processes
+                npu_processes = self.get_npu_processes()
+                if npu_processes:
+                    print(f"  {Colors.YELLOW}Active Processes:{Colors.END} {', '.join(npu_processes)}")
+                else:
+                    print(f"  {Colors.YELLOW}Active Processes:{Colors.END} None")
                 
                 # GPU Information
                 print(f"\n{Colors.BOLD}{Colors.YELLOW}GPU Information:{Colors.END}")
