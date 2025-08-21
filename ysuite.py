@@ -20,7 +20,7 @@ import platform
 import re # Added for NPU load parsing
 
 # Global configuration
-SUITE_VERSION = "2.0.1"
+SUITE_VERSION = "2.0.2"
 SUITE_NAME = "YSuite"
 BASE_DIR = Path("/opt/ysuite")
 LOG_DIR = BASE_DIR / "logs"
@@ -327,7 +327,7 @@ class YTop:
             except:
                 pass
             
-            return processes[:5]  # Return first 5 processes
+            return processes[:5]  # this the first 5 processes
         except:
             return []
     
@@ -347,10 +347,49 @@ class YTop:
             return {'load': 0, 'freq': 0}
     
     def get_accurate_power_readings(self):
-        """Get accurate power readings from hardware sensors"""
+        """Get accurate power readings from hardware sensors - USB-C PD prioritized"""
         power_info = {}
         
         try:
+            # First, check USB-C PD sensors (highest priority)
+            usb_c_voltage = 0
+            usb_c_current = 0
+            usb_c_pd_active = False
+            
+            # Check USB-C voltage from hwmon7
+            try:
+                with open('/sys/class/hwmon/hwmon7/in0_input', 'r') as f:
+                    usb_c_voltage = int(f.read().strip()) / 1000.0  # Convert to V
+            except:
+                pass
+            
+            # Check USB-C current from hwmon7
+            try:
+                with open('/sys/class/hwmon/hwmon7/curr1_input', 'r') as f:
+                    usb_c_current = int(f.read().strip()) / 1000.0  # Convert to A
+            except:
+                pass
+            
+            # Check if USB-C PD is active
+            try:
+                with open('/sys/class/typec/port0/power_operation_mode', 'r') as f:
+                    pd_mode = f.read().strip()
+                    if pd_mode in ['3.0A', '1.5A', '3A']:
+                        usb_c_pd_active = True
+            except:
+                pass
+            
+            # If USB-C is active and has readings, use it as primary source
+            if usb_c_pd_active and usb_c_voltage > 0 and usb_c_current > 0:
+                power_info['voltage_input'] = usb_c_voltage
+                power_info['current_input'] = usb_c_current
+                power_info['power_input'] = usb_c_voltage * usb_c_current
+                power_info['power_source'] = f'USB-C PD {usb_c_voltage}V/{usb_c_current}A'
+                power_info['voltage_input'] = round(power_info['voltage_input'], 2)
+                power_info['current_input'] = round(power_info['current_input'], 2)
+                power_info['power_input'] = round(power_info['power_input'], 2)
+                return power_info
+            
             # Read from regulator summary for actual hardware values
             regulator_data = {}
             try:
@@ -378,34 +417,26 @@ class YTop:
             except:
                 pass
             
-            # Try to get current from hwmon7 (Type-C current sensor)
-            current_sensor = 0
-            try:
-                with open('/sys/class/hwmon/hwmon7/curr1_input', 'r') as f:
-                    current_sensor = int(f.read().strip()) / 1000.0  # Convert to A
-            except:
-                pass
-            
-            # Use regulator data if available (prioritize by voltage)
-            if 'vcc12v_dcin' in regulator_data and regulator_data['vcc12v_dcin']['voltage'] > 0:
-                power_info['voltage_input'] = regulator_data['vcc12v_dcin']['voltage']
-                power_info['current_input'] = regulator_data['vcc12v_dcin']['current']
-                if power_info['current_input'] == 0 and current_sensor > 0:
-                    power_info['current_input'] = current_sensor
-                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = '12V DC Input (Regulator)'
-            elif 'vbus5v0_typec' in regulator_data and regulator_data['vbus5v0_typec']['voltage'] > 0:
+            # Use regulator data if available (prioritize USB-C over 12V)
+            if 'vbus5v0_typec' in regulator_data and regulator_data['vbus5v0_typec']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vbus5v0_typec']['voltage']
                 power_info['current_input'] = regulator_data['vbus5v0_typec']['current']
-                if power_info['current_input'] == 0 and current_sensor > 0:
-                    power_info['current_input'] = current_sensor
+                if power_info['current_input'] == 0 and usb_c_current > 0:
+                    power_info['current_input'] = usb_c_current
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = 'USB-C PD (Regulator)'
+                power_info['power_source'] = 'USB-C (Regulator)'
+            elif 'vcc12v_dcin' in regulator_data and regulator_data['vcc12v_dcin']['voltage'] > 0:
+                power_info['voltage_input'] = regulator_data['vcc12v_dcin']['voltage']
+                power_info['current_input'] = regulator_data['vcc12v_dcin']['current']
+                if power_info['current_input'] == 0 and usb_c_current > 0:
+                    power_info['current_input'] = usb_c_current
+                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
+                power_info['power_source'] = '12V DC Input (Regulator)'
             elif 'vcc5v0_sys' in regulator_data and regulator_data['vcc5v0_sys']['voltage'] > 0:
                 power_info['voltage_input'] = regulator_data['vcc5v0_sys']['voltage']
                 power_info['current_input'] = regulator_data['vcc5v0_sys']['current']
-                if power_info['current_input'] == 0 and current_sensor > 0:
-                    power_info['current_input'] = current_sensor
+                if power_info['current_input'] == 0 and usb_c_current > 0:
+                    power_info['current_input'] = usb_c_current
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
                 power_info['power_source'] = '5V System (Regulator)'
             else:
@@ -423,7 +454,7 @@ class YTop:
                         continue
                 
                 power_info['voltage_input'] = max_voltage * 3  # Voltage divider correction
-                power_info['current_input'] = current_sensor if current_sensor > 0 else 0
+                power_info['current_input'] = usb_c_current if usb_c_current > 0 else 0
                 power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
                 power_info['power_source'] = 'ADC Reading'
             
