@@ -188,3 +188,4 @@ sudo systemctl start watchdog-monitor
 ---
 
 **YSuite Enhanced v2.0.1** - Comprehensive Rock 5B+ monitoring and management suite with real hardware integration and enhanced watchdog capabilities.
+

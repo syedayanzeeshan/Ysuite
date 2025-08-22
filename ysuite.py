@@ -20,7 +20,7 @@ import platform
 import re # Added for NPU load parsing
 
 # Global configuration
-SUITE_VERSION = "2.0.2"
+SUITE_VERSION = "2.1.0"
 SUITE_NAME = "YSuite"
 BASE_DIR = Path("/opt/ysuite")
 LOG_DIR = BASE_DIR / "logs"
@@ -67,8 +67,9 @@ class YTop:
             with open('/proc/stat', 'r') as f:
                 lines = f.readlines()
             
-            # Get individual core information
-            for i in range(8):  # Rock 5B has 8 cores
+            # Get individual core information dynamically
+            cpu_count = os.cpu_count() or 1
+            for i in range(cpu_count):
                 try:
                     # Find the line for this CPU core
                     cpu_line = None
@@ -390,6 +391,25 @@ class YTop:
                 power_info['power_input'] = round(power_info['power_input'], 2)
                 return power_info
             
+            # Check if USB-C sensors exist but show 0 values (power port issue)
+            if usb_c_voltage == 0 and usb_c_current == 0:
+                try:
+                    # Check if sensors exist but are reading 0
+                    with open('/sys/class/hwmon/hwmon7/curr1_input', 'r') as f:
+                        pass  # File exists
+                    with open('/sys/class/hwmon/hwmon7/in0_input', 'r') as f:
+                        pass  # File exists
+                    
+                    # This indicates power port issue
+                    power_info['voltage_input'] = 0
+                    power_info['current_input'] = 0
+                    power_info['power_input'] = 0
+                    power_info['power_source'] = 'USB-C Power Port (No PD Negotiation)'
+                    power_info['power_note'] = 'Try display Type-C port or different charger'
+                    return power_info
+                except:
+                    pass  # Sensors don't exist, continue with normal flow
+            
             # Read from regulator summary for actual hardware values
             regulator_data = {}
             try:
@@ -608,7 +628,7 @@ class YTop:
                 vulkan_info = self.get_vulkan_info()
                 
                 # Display header
-                print(f"{Colors.BOLD}{Colors.CYAN}YSuite - Rock 5B+ System Monitor{Colors.END}")
+                print(f"{Colors.BOLD}{Colors.CYAN}YSuite v{SUITE_VERSION} - System Monitor{Colors.END}")
                 print(f"{Colors.YELLOW}Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.END}")
                 print("=" * 60)
                 
@@ -678,8 +698,13 @@ class YTop:
                     print(f"  Input Current: {power_info['current_input']}A")
                     print(f"  Input Power: {power_info['power_input']}W")
                     print(f"  Source: {power_info['power_source']}")
-                if power_info['voltage_input'] == 0 and power_info['current_input'] == 0:
+                    # Add power recommendations
+                    if power_info['power_input'] < 20 and 'USB-C' in power_info['power_source']:
+                        print(f"  {Colors.YELLOW}💡 Tip: Try 45W+ PD charger for optimal performance{Colors.END}")
+                elif power_info['voltage_input'] == 0 and power_info['current_input'] == 0:
                     print(f"  No power source detected.")
+                    print(f"  {Colors.RED}🔌 Power Port Issue: Try display Type-C port or different charger{Colors.END}")
+                    print(f"  {Colors.YELLOW}💡 Recommendation: Use 45W PD charger on display port{Colors.END}")
                 
                 # Watchdog and Crash Information
                 print(f"\n{Colors.BOLD}{Colors.RED}System Health:{Colors.END}")

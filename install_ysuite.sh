@@ -1,9 +1,9 @@
 #!/bin/bash
-# YSuite Installation Script
-# Comprehensive Rock 5B+ Monitoring and Management Suite
+# YSuite v2.1.0 Installation Script
+# Comprehensive System Monitoring and Management Suite
 set -e
-echo "YSuite - Rock 5B+ Monitoring Suite Installation"
-echo "================================================"
+echo "YSuite v2.1.0 - System Monitoring Suite Installation"
+echo "===================================================="
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root (use sudo)"
     exit 1

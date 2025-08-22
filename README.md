@@ -1,77 +1,74 @@
-# YSuite - Comprehensive Rock 5B+ Monitoring and Management Suite
+# YSuite v2.1.0 - Comprehensive System Monitoring and Management Suite
 
-A unified package for headless Rock 5B+ systems with real-time monitoring, crash detection, power management, and system optimization.
+A unified package for headless systems with real-time monitoring, crash detection, power management, and system optimization.
 
-##  Features
+## Features
 
-### **ytop** - Real-time System Performance Monitor
-- CPU, GPU, NPU, Memory monitoring
-- Temperature and fan control
-- Beautiful CLI dashboard with progress bars
+- **Real-time System Monitoring**: CPU, GPU, NPU, memory, temperature, and power usage
+- **Power Management**: Accurate power readings from hardware sensors (USB-C PD, regulators, ADC)
+- **Watchdog System**: CPU/RAM monitoring with automatic reboot and WiFi connectivity monitoring
+- **Crash Detection**: Automatic crash logging and system recovery
+- **GPU Compute Support**: OpenCL and Vulkan monitoring and testing
+- **Hardware Integration**: Direct access to system sensors and hardware interfaces
 
-### **ylog** - System Log Monitor
-- Real-time critical event detection
-- JSON-structured log storage
-- Pattern-based error classification
+## Quick Start
 
-### **ycrash** - Crash Detection and Analysis
-- Kernel crash detection
-- Segmentation fault monitoring
-- OOM and system panic tracking
+### Installation
 
-### **ypower** - Power Monitoring and PD Negotiation
-- Multi-source power detection (USB PD, ADC, barrel jack)
-- Real-time voltage/current monitoring
-- Aggressive 3A current negotiation
-
-##  Installation
-
-### Quick Install
 ```bash
-# Download and install YSuite
+# Clone the repository
+git clone https://github.com/syedayanzeeshan/Ysuite.git
+cd Ysuite
+
+# Install YSuite
 sudo ./install_ysuite.sh
 ```
 
-### Direct Board Installation
-```bash
-# Copy files to your Rock 5B+ board (via USB, SD card, or direct transfer)
-# Then on the board, run:
-sudo ./install_ysuite.sh
-```
+### Usage
 
-##  Usage
-
-### Get Help
 ```bash
-yhelp
-```
-
-### Basic Commands
-```bash
-# Real-time system monitoring
+# System monitoring
 ytop
 
-# Monitor system logs
+# Power monitoring
+ypower
+
+# Log monitoring
 ylog
 
-# Check for crashes
+# Crash monitoring
 ycrash
 
-# Monitor power
-ypower
+# Watchdog status
+ywatchdog
 ```
 
-##  Package Contents
+## System Requirements
 
-- **ysuite.py** - Main Python script with all functionality
-- **install_ysuite.sh** - Installation script
-- **deploy_ysuite.sh** - Installation guide and instructions
-- **YSUITE_SUMMARY.md** - Detailed documentation
+- Linux system with Python 3.6+
+- Root access for hardware monitoring
+- USB-C PD capable power supply (recommended)
 
-##  Requirements
+## Power Configuration
 
-- Rock 5B+ board
-- Python 3.8+
-- Linux kernel with sysfs support
-- Root/sudo access for hardware monitoring
+YSuite automatically detects and prioritizes power sources:
+1. **USB-C PD sensors** (highest priority)
+2. **Hardware regulators** (voltage/current from kernel)
+3. **ADC readings** (fallback)
+
+For optimal performance, use a 45W+ USB-C PD charger.
+
+## Watchdog Features
+
+- **CPU/RAM Monitoring**: Reboots if usage exceeds 80% for 15 seconds
+- **WiFi Monitoring**: Restarts modem/USB if connectivity lost for 60 seconds
+- **Automatic Recovery**: System health monitoring and crash detection
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Support
+
+For issues and feature requests, please open an issue on GitHub.
 

@@ -502,3 +502,6 @@ echo "⚡ Power, temperature, and performance monitored in real-time"
 
 
 
+
+
+
