@@ -21,6 +21,7 @@ sudo ./install_ysuite.sh
 - `ypower` - Power monitoring  
 - `ylog` - Log monitoring
 - `ycrash` - Crash detection
+- `ydog` - Watchdog stats
 - `yhelp` - Help system
 
 ## Watchdog Features
