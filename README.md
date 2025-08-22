@@ -40,7 +40,7 @@ ylog
 ycrash
 
 # Watchdog status
-ywatchdog
+ydog
 ```
 
 ## System Requirements
@@ -66,7 +66,7 @@ For optimal performance, use a 45W+ USB-C PD charger.
 
 ## License
 
-MIT License - see LICENSE file for details.
+ahaha
 
 ## Support
 
