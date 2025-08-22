@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple Stress Test for Rock 5B+
-Raises CPU usage to ~60% and utilizes GPU/NPU
+Raises CPU usage to ~60% and utilizes GPU
 """
 
 import time
@@ -17,44 +17,66 @@ class SimpleStressTest:
         self.running = True
         self.cpu_threads = []
         self.gpu_process = None
-        self.npu_process = None
         
     def cpu_stress(self, thread_id):
         """CPU stress function - mathematical calculations"""
         print(f"Starting CPU stress thread {thread_id}")
         while self.running:
-            # Mathematical calculations to stress CPU
+            # Very intensive mathematical calculations to stress CPU
             result = 0
-            for i in range(100000):
+            for i in range(10000000):  # 10M iterations for maximum stress
                 result += i * i * 3.14159
-                if i % 10000 == 0:
-                    time.sleep(0.001)  # Small delay to prevent 100% CPU
+                # No delays - maximum CPU usage
         print(f"CPU stress thread {thread_id} stopped")
     
-    def gpu_stress(self):
-        """GPU stress using OpenCL"""
-        print("Starting GPU stress (OpenCL)")
+    def get_gpu_load(self):
+        """Get GPU load percentage"""
         try:
-            # Simple OpenCL test program
-            opencl_code = """
-            __kernel void stress_test(__global float* output) {
-                int gid = get_global_id(0);
-                float x = (float)gid;
-                float result = 0.0f;
-                
-                for(int i = 0; i < 1000; i++) {
-                    result += sin(x + i) * cos(x - i);
+            # Try Mali GPU load
+            with open('/sys/class/devfreq/fb000000.gpu-mali/load', 'r') as f:
+                gpu_load = int(f.read().strip())
+                return gpu_load
+        except:
+            try:
+                # Try alternative GPU load path
+                with open('/sys/class/devfreq/fb000000.gpu/load', 'r') as f:
+                    gpu_load = int(f.read().strip())
+                    return gpu_load
+            except:
+                return 0
+    
+    def gpu_stress(self):
+        """GPU stress using glmark2"""
+        print("Starting GPU stress (glmark2)")
+        try:
+            # Run glmark2 in background
+            self.gpu_process = subprocess.Popen(['glmark2', '--duration', '60', '--fullscreen'], 
+                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("GPU stress using glmark2")
+        except Exception as e:
+            print(f"GPU stress failed: {e}")
+            # Fallback: simple GPU utilization
+            try:
+                # Simple OpenCL test program
+                opencl_code = """
+                __kernel void stress_test(__global float* output) {
+                    int gid = get_global_id(0);
+                    float x = (float)gid;
+                    float result = 0.0f;
+                    
+                    for(int i = 0; i < 1000; i++) {
+                        result += sin(x + i) * cos(x - i);
+                    }
+                    output[gid] = result;
                 }
-                output[gid] = result;
-            }
-            """
-            
-            # Write OpenCL code to temporary file
-            with open('/tmp/gpu_stress.cl', 'w') as f:
-                f.write(opencl_code)
-            
-            # Run OpenCL stress test
-            opencl_test = """
+                """
+                
+                # Write OpenCL code to temporary file
+                with open('/tmp/gpu_stress.cl', 'w') as f:
+                    f.write(opencl_code)
+                
+                # Run OpenCL stress test
+                opencl_test = """
 import pyopencl as cl
 import numpy as np
 
@@ -81,70 +103,106 @@ for i in range(100):
     print(f"GPU iteration {i+1}/100")
     time.sleep(0.1)
 """
-            
-            # Write Python test to file
-            with open('/tmp/gpu_test.py', 'w') as f:
-                f.write(opencl_test)
-            
-            # Run GPU test
-            self.gpu_process = subprocess.Popen(['python3', '/tmp/gpu_test.py'])
-            
-        except Exception as e:
-            print(f"GPU stress failed: {e}")
-            # Fallback: simple GPU utilization
-            try:
-                # Try to use glmark2 if available
-                self.gpu_process = subprocess.Popen(['glmark2', '--duration', '60'])
-            except:
-                print("GPU stress not available")
+                
+                # Write Python test to file
+                with open('/tmp/gpu_test.py', 'w') as f:
+                    f.write(opencl_test)
+                
+                # Run GPU test
+                self.gpu_process = subprocess.Popen(['python3', '/tmp/gpu_test.py'])
+                
+            except Exception as e:
+                print(f"GPU stress not available: {e}")
     
-    def npu_stress(self):
-        """NPU stress using simple operations"""
-        print("Starting NPU stress")
+    def get_cpu_percentage(self):
+        """Get CPU usage percentage"""
         try:
-            # Simple NPU stress using system calls
-            npu_test = """
-import time
-import subprocess
-
-# Try to trigger NPU operations
-for i in range(50):
-    try:
-        # Check NPU load
-        with open('/sys/kernel/debug/rknpu/load', 'r') as f:
-            load = f.read()
-            print(f"NPU Load: {load.strip()}")
-        
-        # Run some system operations that might use NPU
-        subprocess.run(['dd', 'if=/dev/zero', 'of=/tmp/npu_test', 'bs=1M', 'count=10'], 
-                      capture_output=True, timeout=5)
-        subprocess.run(['rm', '-f', '/tmp/npu_test'], capture_output=True)
-        
-        time.sleep(1)
-    except Exception as e:
-        print(f"NPU operation {i+1} failed: {e}")
-        time.sleep(1)
-"""
+            # Read CPU stats
+            with open('/proc/stat', 'r') as f:
+                lines = f.readlines()
             
-            # Write NPU test to file
-            with open('/tmp/npu_test.py', 'w') as f:
-                f.write(npu_test)
+            # Get first line (total CPU)
+            cpu_line = lines[0].split()[1:]
+            cpu_times = [int(x) for x in cpu_line]
             
-            # Run NPU test
-            self.npu_process = subprocess.Popen(['python3', '/tmp/npu_test.py'])
+            # Calculate total and idle time
+            total_time = sum(cpu_times)
+            idle_time = cpu_times[3]  # idle time
+            
+            # Store previous values for calculation
+            if not hasattr(self, 'prev_total'):
+                self.prev_total = total_time
+                self.prev_idle = idle_time
+                return 0.0
+            
+            # Calculate CPU usage percentage
+            total_diff = total_time - self.prev_total
+            idle_diff = idle_time - self.prev_idle
+            
+            if total_diff > 0:
+                cpu_percent = 100.0 * (1.0 - idle_diff / total_diff)
+            else:
+                cpu_percent = 0.0
+            
+            # Update previous values
+            self.prev_total = total_time
+            self.prev_idle = idle_time
+            
+            return cpu_percent
             
         except Exception as e:
-            print(f"NPU stress failed: {e}")
-    
+            return 0.0
+
+    def get_power_readings(self):
+        """Get real-time power readings from multiple sources"""
+        power_info = {
+            'voltage_input': 0,
+            'current_input': 0,
+            'power_input': 0,
+            'power_source': 'Unknown'
+        }
+        
+        try:
+            # Try to get actual current from system load estimation
+            # Since hardware current sensors seem to show max values
+            
+            # Get CPU usage for power estimation
+            cpu_percent = self.get_cpu_percentage()
+            
+            # Base power consumption (idle)
+            base_current = 0.6  # 600mA idle
+            
+            # Estimate current based on CPU usage
+            # Assume linear relationship: 0% CPU = 600mA, 100% CPU = 2400mA
+            estimated_current = base_current + (cpu_percent / 100.0) * 1.8
+            
+            # Use actual voltage from power supply
+            try:
+                with open('/sys/class/power_supply/tcpm-source-psy-4-0022/voltage_now', 'r') as f:
+                    voltage_uv = int(f.read().strip())
+                    power_info['voltage_input'] = voltage_uv / 1000000.0  # Convert μV to V
+            except:
+                power_info['voltage_input'] = 5.0  # Default voltage
+            
+            power_info['current_input'] = estimated_current
+            power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
+            power_info['power_source'] = 'Estimated from CPU Load'
+                
+        except Exception as e:
+            print(f"Power reading error: {e}")
+        
+        return power_info
+
     def monitor_system(self):
-        """Monitor system resources"""
+        """Monitor system resources and power"""
         print("Starting system monitoring")
         while self.running:
             try:
-                # Get CPU usage
-                with open('/proc/loadavg', 'r') as f:
-                    loadavg = f.read().strip().split()
-                    cpu_load = float(loadavg[0])
+                # Get CPU percentage
+                cpu_percent = self.get_cpu_percentage()
+                
+                # Get GPU load
+                gpu_load = self.get_gpu_load()
                 
                 # Get memory usage
                 with open('/proc/meminfo', 'r') as f:
@@ -161,10 +219,19 @@ for i in range(50):
                 except:
                     temp = 0
                 
+                # Get power readings
+                power_info = self.get_power_readings()
+                
+                # Display monitoring info
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] "
-                      f"CPU Load: {cpu_load:.2f}, "
-                      f"Memory: {mem_percent:.1f}%, "
-                      f"Temp: {temp:.1f}°C")
+                      f"CPU: {cpu_percent:.1f}% | "
+                      f"GPU: {gpu_load}% | "
+                      f"RAM: {mem_percent:.1f}% | "
+                      f"Temp: {temp:.1f}°C | "
+                      f"Power: {power_info['voltage_input']:.2f}V, "
+                      f"{power_info['current_input']:.3f}A, "
+                      f"{power_info['power_input']:.2f}W "
+                      f"({power_info['power_source']})")
                 
                 time.sleep(5)
                 
@@ -188,11 +255,6 @@ for i in range(50):
         gpu_thread = threading.Thread(target=self.gpu_stress)
         gpu_thread.daemon = True
         gpu_thread.start()
-        
-        # Start NPU stress
-        npu_thread = threading.Thread(target=self.npu_stress)
-        npu_thread.daemon = True
-        npu_thread.start()
         
         # Start monitoring
         monitor_thread = threading.Thread(target=self.monitor_system)
@@ -225,14 +287,6 @@ for i in range(50):
             except:
                 self.gpu_process.kill()
         
-        # Stop NPU process
-        if self.npu_process:
-            try:
-                self.npu_process.terminate()
-                self.npu_process.wait(timeout=5)
-            except:
-                self.npu_process.kill()
-        
         # Wait for threads to finish
         for thread in self.cpu_threads:
             thread.join(timeout=2)
@@ -241,7 +295,6 @@ for i in range(50):
         try:
             os.remove('/tmp/gpu_stress.cl')
             os.remove('/tmp/gpu_test.py')
-            os.remove('/tmp/npu_test.py')
         except:
             pass
         
@@ -250,9 +303,9 @@ for i in range(50):
         
         # Show final status
         try:
-            with open('/proc/loadavg', 'r') as f:
-                loadavg = f.read().strip()
-                print(f"   Load Average: {loadavg}")
+            # Get final CPU percentage
+            cpu_percent = self.get_cpu_percentage()
+            print(f"   CPU Usage: {cpu_percent:.1f}%")
             
             with open('/proc/meminfo', 'r') as f:
                 lines = f.readlines()
@@ -265,6 +318,18 @@ for i in range(50):
             with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
                 temp = int(f.read().strip()) / 1000
                 print(f"   Temperature: {temp:.1f}°C")
+            
+            # Get final GPU load
+            gpu_load = self.get_gpu_load()
+            print(f"   GPU Load: {gpu_load}%")
+            
+            # Show final power status
+            power_info = self.get_power_readings()
+            print(f"   Power: {power_info['voltage_input']:.2f}V, "
+                  f"{power_info['current_input']:.3f}A, "
+                  f"{power_info['power_input']:.2f}W "
+                  f"({power_info['power_source']})")
+                
         except Exception as e:
             print(f"   Error reading final status: {e}")
 
