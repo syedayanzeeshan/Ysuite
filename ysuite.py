@@ -20,7 +20,7 @@ import platform
 import re # Added for NPU load parsing
 
 # Global configuration
-SUITE_VERSION = "2.1.0"
+SUITE_VERSION = "2.1.1"
 SUITE_NAME = "YSuite"
 BASE_DIR = Path("/opt/ysuite")
 LOG_DIR = BASE_DIR / "logs"
@@ -1179,6 +1179,14 @@ def show_help():
     print(f"   Example: ypower --monitor  # Start power monitoring")
     print()
     
+    print(f"{Colors.BOLD}{Colors.YELLOW}ydog{Colors.END} - Watchdog Status and Monitoring")
+    print(f"   Usage: ydog [--status|-s|--monitor|-r]")
+    print(f"   Description: Check watchdog policies and monitor logs")
+    print(f"   Features: Service status, real-time logs, comprehensive verification")
+    print(f"   Example: ydog -s  # Show service status")
+    print(f"   Example: ydog -r  # Monitor logs in real-time")
+    print()
+    
     print(f"{Colors.BOLD}{Colors.MAGENTA}yhelp{Colors.END} - Show this help message")
     print()
     
@@ -1206,7 +1214,7 @@ def install_suite():
         print(f"{Colors.GREEN}✅ YSuite installed to {install_path}{Colors.END}")
         
         # Create symlinks for individual commands
-        commands = ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp']
+        commands = ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp', 'ydog']
         for cmd in commands:
             symlink_path = Path(f"/usr/local/bin/{cmd}")
             if symlink_path.exists():
@@ -1215,7 +1223,7 @@ def install_suite():
             print(f"{Colors.GREEN}✅ Created symlink: {cmd}{Colors.END}")
             
         print(f"\n{Colors.BOLD}{Colors.GREEN}Installation complete!{Colors.END}")
-        print(f"You can now use: ytop, ylog, ycrash, ypower, yhelp")
+        print(f"You can now use: ytop, ylog, ycrash, ypower, yhelp, ydog")
         
     except Exception as e:
         print(f"{Colors.RED}❌ Installation failed: {e}{Colors.END}")
@@ -1227,7 +1235,7 @@ def main():
     script_name = Path(sys.argv[0]).name
     
     # If called via symlink, use the symlink name as the command
-    if script_name in ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp']:
+    if script_name in ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp', 'ydog']:
         command = script_name
         # Remove the script name from sys.argv so subsequent parsing doesn't see it as an argument
         sys.argv = [sys.argv[0]] + sys.argv[1:]
@@ -1279,6 +1287,18 @@ def main():
             ypower.monitor_power()
         else:
             ypower.monitor_power()  # Default to monitoring
+            
+    elif command == 'ydog':
+        # Handle ydog command with options
+        if '--status' in sys.argv or '-s' in sys.argv:
+            # Show service status
+            subprocess.run(['systemctl', 'status', 'watchdog-monitor.service'], check=False)
+        elif '--monitor' in sys.argv or '-r' in sys.argv:
+            # Monitor logs in real-time
+            subprocess.run(['tail', '-f', '/var/log/watchdog_monitor.log'], check=False)
+        else:
+            # Default: run comprehensive status check
+            subprocess.run(['/usr/local/bin/check_watchdog_status.sh'], check=False)
             
     elif command == 'yhelp':
         show_help()
