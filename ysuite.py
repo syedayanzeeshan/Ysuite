@@ -20,7 +20,7 @@ import platform
 import re # Added for NPU load parsing
 
 # Global configuration
-SUITE_VERSION = "2.1.1"
+SUITE_VERSION = "2.2.0"
 SUITE_NAME = "YSuite"
 BASE_DIR = Path("/opt/ysuite")
 LOG_DIR = BASE_DIR / "logs"
@@ -348,144 +348,45 @@ class YTop:
             return {'load': 0, 'freq': 0}
     
     def get_accurate_power_readings(self):
-        """Get accurate power readings from hardware sensors - USB-C PD prioritized"""
+        """Get voltage reading from ADC only - simplified approach"""
         power_info = {}
         
         try:
-            # First, check USB-C PD sensors (highest priority)
-            usb_c_voltage = 0
-            usb_c_current = 0
-            usb_c_pd_active = False
-            
-            # Check USB-C voltage from hwmon7
+            # Read voltage from ADC channel 6 using the specified formula
             try:
-                with open('/sys/class/hwmon/hwmon7/in0_input', 'r') as f:
-                    usb_c_voltage = int(f.read().strip()) / 1000.0  # Convert to V
-            except:
-                pass
-            
-            # Check USB-C current from hwmon7
-            try:
-                with open('/sys/class/hwmon/hwmon7/curr1_input', 'r') as f:
-                    usb_c_current = int(f.read().strip()) / 1000.0  # Convert to A
-            except:
-                pass
-            
-            # Check if USB-C PD is active
-            try:
-                with open('/sys/class/typec/port0/power_operation_mode', 'r') as f:
-                    pd_mode = f.read().strip()
-                    if pd_mode in ['3.0A', '1.5A', '3A']:
-                        usb_c_pd_active = True
-            except:
-                pass
-            
-            # If USB-C is active and has readings, use it as primary source
-            if usb_c_pd_active and usb_c_voltage > 0 and usb_c_current > 0:
-                power_info['voltage_input'] = usb_c_voltage
-                power_info['current_input'] = usb_c_current
-                power_info['power_input'] = usb_c_voltage * usb_c_current
-                power_info['power_source'] = f'USB-C PD {usb_c_voltage}V/{usb_c_current}A'
-                power_info['voltage_input'] = round(power_info['voltage_input'], 2)
-                power_info['current_input'] = round(power_info['current_input'], 2)
-                power_info['power_input'] = round(power_info['power_input'], 2)
-                return power_info
-            
-            # Check if USB-C sensors exist but show 0 values (power port issue)
-            if usb_c_voltage == 0 and usb_c_current == 0:
-                try:
-                    # Check if sensors exist but are reading 0
-                    with open('/sys/class/hwmon/hwmon7/curr1_input', 'r') as f:
-                        pass  # File exists
-                    with open('/sys/class/hwmon/hwmon7/in0_input', 'r') as f:
-                        pass  # File exists
-                    
-                    # This indicates power port issue
-                    power_info['voltage_input'] = 0
-                    power_info['current_input'] = 0
-                    power_info['power_input'] = 0
-                    power_info['power_source'] = 'USB-C Power Port (No PD Negotiation)'
-                    power_info['power_note'] = 'Try display Type-C port or different charger'
+                with open('/sys/bus/iio/devices/iio:device0/in_voltage6_raw', 'r') as f:
+                    adc_raw = int(f.read().strip())
+                    # Use the exact formula: voltage = adc_raw / 172.5
+                    voltage = adc_raw / 172.5
+                    power_info['voltage_input'] = round(voltage, 2)
+                    power_info['current_input'] = 0  # Not measured
+                    power_info['power_input'] = 0    # Not calculated
+                    power_info['power_source'] = 'ADC Channel 6'
                     return power_info
-                except:
-                    pass  # Sensors don't exist, continue with normal flow
-            
-            # Read from regulator summary for actual hardware values
-            regulator_data = {}
-            try:
-                with open('/sys/kernel/debug/regulator/regulator_summary', 'r') as f:
-                    lines = f.readlines()
-                    for line in lines:
-                        if 'vcc12v_dcin' in line and 'unknown' in line and '12000mV' in line:
-                            parts = line.split()
-                            if len(parts) >= 7:
-                                voltage = int(parts[5].replace('mV', '')) / 1000.0  # Convert to V
-                                current = int(parts[6].replace('mA', '')) / 1000.0  # Convert to A
-                                regulator_data['vcc12v_dcin'] = {'voltage': voltage, 'current': current}
-                        elif 'vcc5v0_sys' in line and 'unknown' in line and '5000mV' in line:
-                            parts = line.split()
-                            if len(parts) >= 7:
-                                voltage = int(parts[5].replace('mV', '')) / 1000.0  # Convert to V
-                                current = int(parts[6].replace('mA', '')) / 1000.0  # Convert to A
-                                regulator_data['vcc5v0_sys'] = {'voltage': voltage, 'current': current}
-                        elif 'vbus5v0_typec' in line and 'unknown' in line and '5000mV' in line:
-                            parts = line.split()
-                            if len(parts) >= 7:
-                                voltage = int(parts[5].replace('mV', '')) / 1000.0  # Convert to V
-                                current = int(parts[6].replace('mA', '')) / 1000.0  # Convert to A
-                                regulator_data['vbus5v0_typec'] = {'voltage': voltage, 'current': current}
-            except:
-                pass
-            
-            # Use regulator data if available (prioritize USB-C over 12V)
-            if 'vbus5v0_typec' in regulator_data and regulator_data['vbus5v0_typec']['voltage'] > 0:
-                power_info['voltage_input'] = regulator_data['vbus5v0_typec']['voltage']
-                power_info['current_input'] = regulator_data['vbus5v0_typec']['current']
-                if power_info['current_input'] == 0 and usb_c_current > 0:
-                    power_info['current_input'] = usb_c_current
-                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = 'USB-C (Regulator)'
-            elif 'vcc12v_dcin' in regulator_data and regulator_data['vcc12v_dcin']['voltage'] > 0:
-                power_info['voltage_input'] = regulator_data['vcc12v_dcin']['voltage']
-                power_info['current_input'] = regulator_data['vcc12v_dcin']['current']
-                if power_info['current_input'] == 0 and usb_c_current > 0:
-                    power_info['current_input'] = usb_c_current
-                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = '12V DC Input (Regulator)'
-            elif 'vcc5v0_sys' in regulator_data and regulator_data['vcc5v0_sys']['voltage'] > 0:
-                power_info['voltage_input'] = regulator_data['vcc5v0_sys']['voltage']
-                power_info['current_input'] = regulator_data['vcc5v0_sys']['current']
-                if power_info['current_input'] == 0 and usb_c_current > 0:
-                    power_info['current_input'] = usb_c_current
-                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = '5V System (Regulator)'
-            else:
-                # Fallback to ADC reading
-                max_voltage = 0
-                for i in range(8):  # Check multiple ADC channels
+            except Exception as e:
+                # Fallback to other ADC channels if channel 6 fails
+                for i in range(8):
                     try:
                         with open(f'/sys/bus/iio/devices/iio:device0/in_voltage{i}_raw', 'r') as f:
                             adc_raw = int(f.read().strip())
-                            # Convert to voltage (assuming 3.3V reference)
-                            voltage = (adc_raw / 4095) * 3.3
-                            if voltage > max_voltage:
-                                max_voltage = voltage
+                            voltage = adc_raw / 172.5
+                            power_info['voltage_input'] = round(voltage, 2)
+                            power_info['current_input'] = 0
+                            power_info['power_input'] = 0
+                            power_info['power_source'] = f'ADC Channel {i}'
+                            return power_info
                     except:
                         continue
                 
-                power_info['voltage_input'] = max_voltage * 3  # Voltage divider correction
-                power_info['current_input'] = usb_c_current if usb_c_current > 0 else 0
-                power_info['power_input'] = power_info['voltage_input'] * power_info['current_input']
-                power_info['power_source'] = 'ADC Reading'
-            
-            # Round values
-            power_info['voltage_input'] = round(power_info['voltage_input'], 2)
-            power_info['current_input'] = round(power_info['current_input'], 2)
-            power_info['power_input'] = round(power_info['power_input'], 2)
-            
-            return power_info
-        except:
-            return {'voltage_input': 0, 'current_input': 0, 'power_input': 0, 'power_source': 'Unknown'}
+                # If all ADC channels fail
+                power_info['voltage_input'] = 0
+                power_info['current_input'] = 0
+                power_info['power_input'] = 0
+                power_info['power_source'] = 'ADC Unavailable'
+                return power_info
+                
+        except Exception as e:
+            return {'voltage_input': 0, 'current_input': 0, 'power_input': 0, 'power_source': 'Error'}
 
     def get_power_info(self):
         """Get power, voltage, and current information (legacy method)"""
