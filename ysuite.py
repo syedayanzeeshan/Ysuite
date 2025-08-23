@@ -179,11 +179,13 @@ class YTop:
             
             # Voltage sensors (ADC)
             try:
-                with open('/sys/devices/platform/fec10000.saradc/iio:device0/in_voltage6_raw', 'r') as f:
-                    adc_raw = int(f.read().strip())
-                    # Convert to voltage (approximate conversion with voltage divider correction)
-                    voltage = (adc_raw / 4095) * 3.3 * 3  # Assuming 3.3V reference and voltage divider
-                    sensors['adc_voltage'] = round(voltage, 2)
+                result = subprocess.run(['awk', '{printf ("%0.2f\n",$1/172.5); }', '/sys/bus/iio/devices/iio:device0/in_voltage6_raw'], 
+                                      capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    voltage = float(result.stdout.strip())
+                    sensors['adc_voltage'] = voltage
+                else:
+                    sensors['adc_voltage'] = 0
             except:
                 sensors['adc_voltage'] = 0
             
@@ -352,13 +354,13 @@ class YTop:
         power_info = {}
         
         try:
-            # Read voltage from ADC channel 6 using the specified formula
+            # Read voltage from ADC channel 6 using subprocess to get exact awk output
             try:
-                with open('/sys/bus/iio/devices/iio:device0/in_voltage6_raw', 'r') as f:
-                    adc_raw = int(f.read().strip())
-                    # Use the exact formula: voltage = adc_raw / 172.5
-                    voltage = adc_raw / 172.5
-                    power_info['voltage_input'] = round(voltage, 2)
+                result = subprocess.run(['awk', '{printf ("%0.2f\n",$1/172.5); }', '/sys/bus/iio/devices/iio:device0/in_voltage6_raw'], 
+                                      capture_output=True, text=True, timeout=2)
+                if result.returncode == 0:
+                    voltage = float(result.stdout.strip())
+                    power_info['voltage_input'] = voltage
                     power_info['current_input'] = 0  # Not measured
                     power_info['power_input'] = 0    # Not calculated
                     power_info['power_source'] = 'ADC Channel 6'
@@ -367,10 +369,11 @@ class YTop:
                 # Fallback to other ADC channels if channel 6 fails
                 for i in range(8):
                     try:
-                        with open(f'/sys/bus/iio/devices/iio:device0/in_voltage{i}_raw', 'r') as f:
-                            adc_raw = int(f.read().strip())
-                            voltage = adc_raw / 172.5
-                            power_info['voltage_input'] = round(voltage, 2)
+                        result = subprocess.run(['awk', '{printf ("%0.2f\n",$1/172.5); }', f'/sys/bus/iio/devices/iio:device0/in_voltage{i}_raw'], 
+                                              capture_output=True, text=True, timeout=2)
+                        if result.returncode == 0:
+                            voltage = float(result.stdout.strip())
+                            power_info['voltage_input'] = voltage
                             power_info['current_input'] = 0
                             power_info['power_input'] = 0
                             power_info['power_source'] = f'ADC Channel {i}'
