@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-YSuite - Comprehensive Rock 5B+ Monitoring and Management Suite
-A unified package for headless Rock 5B+ systems with real-time monitoring,
-crash detection, power management, and system optimization.
+YSuite - Complete System Monitoring Suite v3.0.0
+A comprehensive Python implementation using exact system monitoring methods
 """
 
 import os
@@ -17,10 +16,12 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 import platform
-import re # Added for NPU load parsing
+import re
+import glob
+from typing import Dict, List, Tuple, Optional
 
 # Global configuration
-SUITE_VERSION = "2.2.0"
+SUITE_VERSION = "3.1.0"
 SUITE_NAME = "YSuite"
 BASE_DIR = Path("/opt/ysuite")
 LOG_DIR = BASE_DIR / "logs"
@@ -50,420 +51,514 @@ class YSuite:
             directory.mkdir(parents=True, exist_ok=True)
 
 class YTop:
-    """Real-time system performance monitor (CLI version of rtop)"""
+    """Real-time system performance monitor - exact system methodology"""
     
     def __init__(self):
         self.running = False
         self.crash_count = 0
         self.watchdog_resets = 0
-        self.last_cpu_stats = None
         
-    def get_cpu_info(self):
-        """Get CPU load and frequency information for each core"""
+        # System initialization
+        self.nrCPUs = 4
+        self.nrNPUs = 0
+        self.nrRGAs = 0
+        self.maxFan = 0
+        
+        # Paths (exact system paths)
+        self.gpuLoadPath = ""
+        self.npuLoadPath = ""
+        self.fanLoadPath = ""
+        
+        # CPU stats
+        self.prevStats = []
+        self.currStats = []
+        
+        # Initialize paths and counts
+        self.findPwmFanDevice()
+        self.findGPULoadPath()
+        self.findNPULoadPath()
+        self.nrCPUs = self.getNumberOfCores()
+        
+        # Initialize CPU stats arrays
+        self.prevStats = [[] for _ in range(self.nrCPUs)]
+        self.currStats = [[] for _ in range(self.nrCPUs)]
+        
+        # Read initial CPU stats
+        for i in range(self.nrCPUs):
+            self.prevStats[i] = self.readCPUStats(i)
+        
+        # Update SoC name
+        self.updateSoCName()
+        
+        # Read RGA frequency once
+        self.readRGAFreq()
+    
+    def getNumberOfCores(self):
+        """Get number of CPU cores"""
+        return os.cpu_count() or 1
+    
+    def findPwmFanDevice(self):
+        """Find PWM fan device - exact system method"""
         try:
-            cpu_info = {'cores': [], 'total_load': 0, 'avg_freq': 0}
+            cooling_devices = glob.glob("/sys/class/thermal/cooling_device*")
             
-            # Read all CPU stats at once
+            for device in cooling_devices:
+                type_file = os.path.join(device, "type")
+                try:
+                    with open(type_file, 'r') as f:
+                        device_type = f.read().strip()
+                    
+                    if "pwm-fan" in device_type:
+                        # Set max fan
+                        max_state_file = os.path.join(device, "max_state")
+                        try:
+                            with open(max_state_file, 'r') as f:
+                                pwm_value = f.read().strip()
+                                self.maxFan = int(pwm_value)
+                        except:
+                            self.maxFan = 255
+                        
+                        # Set current fan path
+                        self.fanLoadPath = os.path.join(device, "cur_state")
+                        break
+                except:
+                    continue
+        except:
+            pass
+    
+    def findGPULoadPath(self):
+        """Find GPU load path - exact system method"""
+        try:
+            gpu_patterns = ["*.gpu"]
+            for pattern in gpu_patterns:
+                gpu_paths = glob.glob(f"/sys/class/devfreq/{pattern}")
+                if gpu_paths:
+                    self.gpuLoadPath = os.path.join(gpu_paths[0], "load")
+                    break
+        except:
+            pass
+    
+    def findNPULoadPath(self):
+        """Find NPU load path - exact system method"""
+        try:
+            npu_patterns = ["*.npu"]
+            for pattern in npu_patterns:
+                npu_paths = glob.glob(f"/sys/class/devfreq/{pattern}")
+                if npu_paths:
+                    self.npuLoadPath = os.path.join(npu_paths[0], "cur_freq")
+                    break
+        except:
+            pass
+    
+    def readCPUStats(self, cpuNumber):
+        """Read CPU statistics from /proc/stat - exact system method"""
+        stats = []
+        try:
             with open('/proc/stat', 'r') as f:
-                lines = f.readlines()
-            
-            # Get individual core information dynamically
-            cpu_count = os.cpu_count() or 1
-            for i in range(cpu_count):
-                try:
-                    # Find the line for this CPU core
-                    cpu_line = None
-                    for line in lines:
-                        if line.startswith(f'cpu{i}'):
-                            cpu_line = line.split()
-                            break
-                    
-                    if cpu_line:
-                        # Calculate load using psutil for better accuracy
-                        try:
-                            import psutil
-                            cpu_percent = psutil.cpu_percent(interval=0.1, percpu=True)
-                            if i < len(cpu_percent):
-                                load = cpu_percent[i]
-                            else:
-                                load = 0
-                        except:
-                            # Fallback to simple calculation
-                            total = sum(int(x) for x in cpu_line[1:])
-                            idle = int(cpu_line[4])  # idle time is at index 4
-                            load = 100 - (idle * 100 / total) if total > 0 else 0
-                        
-                        # CPU frequency for each core
-                        try:
-                            with open(f'/sys/devices/system/cpu/cpu{i}/cpufreq/scaling_cur_freq', 'r') as f:
-                                freq = int(f.read().strip()) // 1000  # Convert to MHz
-                        except:
-                            freq = 0
-                        
-                        cpu_info['cores'].append({
-                            'core': i,
-                            'load': round(load, 1),
-                            'freq': freq
-                        })
-                    else:
-                        cpu_info['cores'].append({
-                            'core': i,
-                            'load': 0,
-                            'freq': 0
-                        })
-                except:
-                    cpu_info['cores'].append({
-                        'core': i,
-                        'load': 0,
-                        'freq': 0
-                    })
-            
-            # Calculate total load and average frequency
-            total_load = sum(core['load'] for core in cpu_info['cores'])
-            avg_freq = sum(core['freq'] for core in cpu_info['cores']) // len(cpu_info['cores'])
-            
-            cpu_info['total_load'] = round(total_load / len(cpu_info['cores']), 1)
-            cpu_info['avg_freq'] = avg_freq
-            
-            return cpu_info
+                for line in f:
+                    if line.startswith(f'cpu{cpuNumber} '):
+                        parts = line.split()[1:]  # Skip the 'cpuX' label
+                        stats = [int(x) for x in parts]
+                        break
         except:
-            return {'cores': [], 'total_load': 0, 'avg_freq': 0}
+            pass
+        return stats
     
-    def get_sensor_info(self):
-        """Get sensor information from various sources"""
-        sensors = {}
+    def calculateCPULoad(self, prevStats, currStats):
+        """Calculate CPU load percentage - exact system method"""
+        if len(prevStats) < 8 or len(currStats) < 8:
+            return 0.0
         
-        try:
-            # Temperature sensors
-            for i in range(10):  # Check multiple thermal zones
-                try:
-                    with open(f'/sys/class/thermal/thermal_zone{i}/temp', 'r') as f:
-                        temp = int(f.read().strip()) / 1000
-                        sensors[f'temp_zone{i}'] = round(temp, 1)
-                except:
-                    continue
-            
-            # Fan sensors - try multiple possible paths
-            fan_state = 0
-            fan_paths = [
-                '/sys/class/thermal/cooling_device0/cur_state',
-                '/sys/class/thermal/cooling_device1/cur_state',
-                '/sys/class/hwmon/hwmon*/fan1_input',
-                '/sys/class/hwmon/hwmon*/pwm1'
-            ]
-            
-            for path in fan_paths:
-                try:
-                    if '*' in path:
-                        # Handle wildcard paths
-                        import glob
-                        for actual_path in glob.glob(path):
-                            try:
-                                with open(actual_path, 'r') as f:
-                                    value = int(f.read().strip())
-                                    if value > 0:
-                                        fan_state = value
-                                        break
-                            except:
-                                continue
-                    else:
-                        with open(path, 'r') as f:
-                            value = int(f.read().strip())
-                            if value > 0:
-                                fan_state = value
-                                break
-                except:
-                    continue
-            
-            sensors['fan_state'] = fan_state
-            
-            # Voltage sensors (ADC)
-            try:
-                result = subprocess.run(['awk', '{printf ("%0.2f\n",$1/172.5); }', '/sys/bus/iio/devices/iio:device0/in_voltage6_raw'], 
-                                      capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    voltage = float(result.stdout.strip())
-                    sensors['adc_voltage'] = voltage
-                else:
-                    sensors['adc_voltage'] = 0
-            except:
-                sensors['adc_voltage'] = 0
-            
-            return sensors
-        except:
-            return {}
+        prevIdle = prevStats[3] + prevStats[4]  # idle + iowait
+        currIdle = currStats[3] + currStats[4]
+        
+        prevNonIdle = prevStats[0] + prevStats[1] + prevStats[2] + prevStats[5] + prevStats[6] + prevStats[7]
+        currNonIdle = currStats[0] + currStats[1] + currStats[2] + currStats[5] + currStats[6] + currStats[7]
+        
+        prevTotal = prevIdle + prevNonIdle
+        currTotal = currIdle + currNonIdle
+        
+        totalDelta = currTotal - prevTotal
+        idleDelta = currIdle - prevIdle
+        
+        if totalDelta == 0:
+            return 0.0
+        
+        return (totalDelta - idleDelta) / totalDelta * 100.0
     
-    def get_memory_info(self):
-        """Get detailed memory usage information"""
+    def readCPUFrequency(self, cpuNumber):
+        """Read CPU frequency - exact system method"""
         try:
-            with open('/proc/meminfo', 'r') as f:
-                lines = f.readlines()
-                mem_info = {}
-                for line in lines:
-                    if ':' in line:
-                        key, value = line.split(':', 1)
-                        mem_info[key.strip()] = int(value.split()[0])
-                        
-            total = mem_info['MemTotal']
-            available = mem_info['MemAvailable']
-            used = total - available
-            usage_percent = (used / total) * 100
-            
-            # Get swap information
-            swap_total = mem_info.get('SwapTotal', 0)
-            swap_free = mem_info.get('SwapFree', 0)
-            swap_used = swap_total - swap_free
-            swap_usage_percent = (swap_used / swap_total * 100) if swap_total > 0 else 0
-            
-            return {
-                'total': total // 1024,  # MB
-                'used': used // 1024,    # MB
-                'available': available // 1024,  # MB
-                'usage_percent': round(usage_percent, 1),
-                'swap_total': swap_total // 1024,  # MB
-                'swap_used': swap_used // 1024,    # MB
-                'swap_usage_percent': round(swap_usage_percent, 1)
-            }
+            path = f"/sys/devices/system/cpu/cpu{cpuNumber}/cpufreq/scaling_cur_freq"
+            with open(path, 'r') as f:
+                frequency = int(f.read().strip())
+            return frequency / 1000000.0  # Convert to GHz
         except:
-            return {'total': 0, 'used': 0, 'available': 0, 'usage_percent': 0, 'swap_total': 0, 'swap_used': 0, 'swap_usage_percent': 0}
+            return 0.0
     
-    def get_npu_info(self):
-        """Get NPU load and frequency information"""
+    def readNpuLoad(self):
+        """Read NPU load using sudo - exact system method"""
         try:
-            npu_info = {'cores': [], 'total_load': 0, 'avg_freq': 0}
-            
-            # Get NPU frequency
-            try:
-                with open('/sys/class/devfreq/fdab0000.npu/cur_freq', 'r') as f:
-                    freq = int(f.read().strip()) // 1000000  # Convert to MHz
-            except:
-                freq = 1000  # Default frequency
-            
-            # Get NPU load from debug file
-            try:
-                with open('/sys/kernel/debug/rknpu/load', 'r') as f:
-                    load_data = f.read().strip()
-                    # Parse: "NPU load:  Core0:  0%, Core1:  0%, Core2:  0%,"
-                    import re
-                    core_loads = re.findall(r'Core(\d+):\s*(\d+)%', load_data)
-                    
-                    total_load = 0
-                    for core_num, load_str in core_loads:
-                        load = int(load_str)
-                        npu_info['cores'].append({
-                            'core': f'NPU{core_num}',
-                            'load': load,
-                            'freq': freq
-                        })
-                        total_load += load
-                    
-                    npu_info['total_load'] = total_load
-                    npu_info['avg_freq'] = freq
-            except:
-                # Fallback to process-based detection
-                try:
-                    import subprocess
-                    result = subprocess.run(['pgrep', '-c', 'rknn'], capture_output=True, text=True)
-                    process_count = int(result.stdout.strip()) if result.stdout.strip() else 0
-                    
-                    # Simulate load based on process count
-                    load_per_core = min(process_count * 10, 100)  # Max 100% per core
-                    
-                    for i in range(3):  # 3 NPU cores
-                        npu_info['cores'].append({
-                            'core': f'NPU{i}',
-                            'load': load_per_core,
-                            'freq': freq
-                        })
-                        npu_info['total_load'] += load_per_core
-                    
-                    npu_info['avg_freq'] = freq
-                except:
-                    # Default values
-                    for i in range(3):
-                        npu_info['cores'].append({
-                            'core': f'NPU{i}',
-                            'load': 0,
-                            'freq': freq
-                        })
-            
-            return npu_info
+            result = subprocess.run(['sudo', 'cat', '/sys/kernel/debug/rknpu/load'], 
+                                  capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                return result.stdout.strip()
+            return ""
         except:
-            return {'cores': [], 'total_load': 0, 'avg_freq': 0}
+            return ""
     
-    def get_npu_processes(self):
-        """Get processes using NPU"""
+    def getNPUProcesses(self):
+        """Get NPU-related processes"""
         try:
-            import subprocess
-            processes = []
-            
-            # Check for RKNN processes
-            try:
-                result = subprocess.run(['pgrep', '-f', 'rknn'], capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    pids = result.stdout.strip().split('\n')
-                    for pid in pids:
-                        if pid:
-                            try:
-                                # Get process name
-                                with open(f'/proc/{pid}/comm', 'r') as f:
-                                    name = f.read().strip()
-                                processes.append(f"{name}({pid})")
-                            except:
-                                processes.append(f"rknn({pid})")
-            except:
-                pass
-            
-            # Check for other AI/ML processes
-            try:
-                result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    ai_keywords = ['npu', 'ai', 'ml', 'inference', 'tensor', 'onnx', 'openvino']
-                    for line in result.stdout.split('\n'):
-                        if any(keyword in line.lower() for keyword in ai_keywords):
-                            parts = line.split()
-                            if len(parts) >= 11:
-                                name = parts[10]
-                                pid = parts[1]
-                                if name not in ['grep', 'ps']:
-                                    processes.append(f"{name}({pid})")
-            except:
-                pass
-            
-            return processes[:5]  # this the first 5 processes
+            result = subprocess.run(['pgrep', '-f', 'rknn'], capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                pids = result.stdout.strip().split('\n')
+                processes = []
+                for pid in pids:
+                    if pid:
+                        try:
+                            # Get process name
+                            with open(f'/proc/{pid}/comm', 'r') as f:
+                                name = f.read().strip()
+                            processes.append(f"{name}({pid})")
+                        except:
+                            processes.append(f"process({pid})")
+                return processes
+            return []
         except:
             return []
     
-    def get_gpu_info(self):
-        """Get GPU load and frequency"""
-        try:
-            # GPU load - updated for Mali driver
-            with open('/sys/class/devfreq/fb000000.gpu-mali/load', 'r') as f:
-                load = int(f.read().strip())
-                
-            # GPU frequency - updated for Mali driver
-            with open('/sys/class/devfreq/fb000000.gpu-mali/cur_freq', 'r') as f:
-                freq = int(f.read().strip()) // 1000000  # Convert to MHz
-                
-            return {'load': load, 'freq': freq}
-        except:
-            return {'load': 0, 'freq': 0}
+    def readNPULoad(self):
+        """Read NPU load and parse - exact system method"""
+        loads = []
+        load_data = self.readNpuLoad()
+        
+        if not load_data:
+            return 0
+        
+        # Parse multi-core format: "Core0: X%, Core1: Y%, Core2: Z%"
+        if "Core" in load_data:
+            pos0 = load_data.find("Core0:")
+            pos1 = load_data.find("Core1:")
+            pos2 = load_data.find("Core2:")
+            
+            if pos0 != -1:
+                try:
+                    sub = load_data[pos0 + 6:pos0 + 9]
+                    loads.append(int(sub))
+                except:
+                    loads.append(0)
+            if pos1 != -1:
+                try:
+                    sub = load_data[pos1 + 6:pos1 + 9]
+                    loads.append(int(sub))
+                except:
+                    loads.append(0)
+            if pos2 != -1:
+                try:
+                    sub = load_data[pos2 + 6:pos2 + 9]
+                    loads.append(int(sub))
+                except:
+                    loads.append(0)
+        else:
+            # Parse single load format: "X%"
+            pos = load_data.find("%")
+            if pos != -1:
+                try:
+                    sub = load_data[pos - 2:pos + 1]
+                    loads.append(int(sub))
+                except:
+                    loads.append(0)
+        
+        self.nrNPUs = len(loads)
+        return self.nrNPUs
     
-    def get_accurate_power_readings(self):
-        """Get voltage reading from ADC only - simplified approach"""
-        power_info = {}
+    def getNPUfreq(self):
+        """Get NPU frequency - exact system method"""
+        try:
+            if not self.npuLoadPath:
+                return 1000000000  # Default 1GHz
+            
+            with open(self.npuLoadPath, 'r') as f:
+                frequency = int(f.read().strip())
+            return frequency
+        except:
+            return 1000000000
+    
+    def readRgaFreq(self):
+        """Read RGA frequency - exact system method"""
+        try:
+            result = subprocess.run(['sudo', 'cat', '/sys/kernel/debug/clk/clk_summary'], 
+                                  capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                return result.stdout.strip()
+            return ""
+        except:
+            return ""
+    
+    def readRGAFreq(self):
+        """Read RGA frequency and parse - exact system method"""
+        self.nrRGAs = 0
+        freq_data = self.readRgaFreq()
+        
+        if not freq_data:
+            return
+        
+        # Parse RGA frequencies using regex patterns
+        patterns = [
+            r'aclk_rga\s+\d+\s+\d+\s+\d+\s+(\d+)\s+\d+\s+\d+\s+\d',
+            r'aclk_rga3_0\s+\d+\s+\d+\s+\d+\s+(\d+)\s+\d+\s+\d+\s+\d',
+            r'aclk_rga3_1\s+\d+\s+\d+\s+\d+\s+(\d+)\s+\d+\s+\d+\s+\d',
+            r'aclk_rga2\s+\d+\s+\d+\s+\d+\s+(\d+)\s+\d+\s+\d+\s+\d'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, freq_data)
+            if match:
+                self.nrRGAs += 1
+    
+    def readRgaLoad(self):
+        """Read RGA load - exact system method"""
+        try:
+            result = subprocess.run(['sudo', 'cat', '/sys/kernel/debug/rkrga/load'], 
+                                  capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                return result.stdout.strip()
+            return ""
+        except:
+            return ""
+    
+    def readGPULoad(self):
+        """Read GPU load - exact system method"""
+        load = -1
+        maxFrequency = -1
         
         try:
-            # Read voltage from ADC channel 6 using subprocess to get exact awk output
-            try:
-                result = subprocess.run(['awk', '{printf ("%0.2f\n",$1/172.5); }', '/sys/bus/iio/devices/iio:device0/in_voltage6_raw'], 
-                                      capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    voltage = float(result.stdout.strip())
-                    power_info['voltage_input'] = voltage
-                    power_info['current_input'] = 0  # Not measured
-                    power_info['power_input'] = 0    # Not calculated
-                    power_info['power_source'] = 'ADC Channel 6'
-                    return power_info
-            except Exception as e:
-                # Fallback to other ADC channels if channel 6 fails
-                for i in range(8):
-                    try:
-                        result = subprocess.run(['awk', '{printf ("%0.2f\n",$1/172.5); }', f'/sys/bus/iio/devices/iio:device0/in_voltage{i}_raw'], 
-                                              capture_output=True, text=True, timeout=2)
-                        if result.returncode == 0:
-                            voltage = float(result.stdout.strip())
-                            power_info['voltage_input'] = voltage
-                            power_info['current_input'] = 0
-                            power_info['power_input'] = 0
-                            power_info['power_source'] = f'ADC Channel {i}'
-                            return power_info
-                    except:
-                        continue
-                
-                # If all ADC channels fail
-                power_info['voltage_input'] = 0
-                power_info['current_input'] = 0
-                power_info['power_input'] = 0
-                power_info['power_source'] = 'ADC Unavailable'
-                return power_info
-                
+            if not self.gpuLoadPath:
+                return load, maxFrequency
+            
+            with open(self.gpuLoadPath, 'r') as f:
+                line = f.read().strip()
+            
+            # Parse format: "load@frequency" (e.g., "85@1000000000Hz")
+            parts = line.split('@')
+            if len(parts) >= 2:
+                load = int(parts[0])
+                freq_str = parts[1].replace('Hz', '')
+                maxFrequency = int(freq_str)
+        except:
+            pass
+        
+        return load, maxFrequency
+    
+    def readMemInfo(self):
+        """Read memory info - exact system method"""
+        memInfo = {}
+        try:
+            with open('/proc/meminfo', 'r') as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        key = parts[0].rstrip(':')
+                        value = int(parts[1])
+                        memInfo[key] = value
+        except:
+            pass
+        return memInfo
+    
+    def readTemperature(self, path):
+        """Read temperature - exact system method"""
+        try:
+            with open(path, 'r') as f:
+                temp = float(f.read().strip())
+            return temp / 1000.0  # Convert from millidegrees to degrees
+        except:
+            return 0.0
+    
+    def get_voltage_reading(self):
+        """Get voltage reading using the exact method specified"""
+        try:
+            # Use the exact method: awk '{printf ("%0.2f\n",$1/172.5); }' /sys/bus/iio/devices/iio:device0/in_voltage6_raw
+            result = subprocess.run(['awk', '{printf ("%0.2f\\n",$1/172.5); }', '/sys/bus/iio/devices/iio:device0/in_voltage6_raw'],
+                                  capture_output=True, text=True, timeout=2)
+            
+            if result.returncode == 0:
+                return float(result.stdout.strip())
+            else:
+                return 0.0
         except Exception as e:
-            return {'voltage_input': 0, 'current_input': 0, 'power_input': 0, 'power_source': 'Error'}
-
-    def get_power_info(self):
-        """Get power, voltage, and current information (legacy method)"""
-        return self.get_accurate_power_readings()
+            return 0.0
+    
+    def updateSoCName(self):
+        """Update SoC name - exact system method"""
+        try:
+            with open('/sys/firmware/devicetree/base/compatible', 'r') as f:
+                content = f.read().strip()
+            
+            # Find rk**** part
+            match = re.search(r'rk\d{4}', content)
+            if match:
+                self.socName = match.group(0).upper()
+            else:
+                self.socName = "ROCK"
+        except:
+            self.socName = "ROCK"
+    
+    def readCPULoad(self):
+        """Read CPU load - exact system method"""
+        cpuLoad = [0] * 8
+        
+        for i in range(self.nrCPUs):
+            self.currStats[i] = self.readCPUStats(i)
+            cpuLoad[i] = self.calculateCPULoad(self.prevStats[i], self.currStats[i])
+            self.prevStats[i] = self.currStats[i]
+        
+        return cpuLoad
+    
+    def readCPUFreq(self):
+        """Read CPU frequency - exact system method"""
+        frequency = [0] * 8
+        
+        for i in range(self.nrCPUs):
+            frequency[i] = self.readCPUFrequency(i)
+        
+        return frequency
+    
+    def readNPUFreq(self):
+        """Read NPU frequency - exact system method"""
+        frequency = self.getNPUfreq()
+        return frequency / 1000000000.0  # Convert to GHz
+    
+    def readRAM(self):
+        """Read RAM - exact system method"""
+        memInfo = self.readMemInfo()
+        
+        totalRAM = memInfo.get('MemTotal', 0)  # Total RAM in kB
+        availableRAM = memInfo.get('MemAvailable', 0)  # Available RAM in kB
+        usedRAM = totalRAM - availableRAM  # Used RAM in kB
+        totalSwap = memInfo.get('SwapTotal', 0)  # Total Swap in kB
+        freeSwap = memInfo.get('SwapFree', 0)  # Free Swap in kB
+        usedSwap = totalSwap - freeSwap  # Used Swap in kB
+        
+        return {
+            'total_ram_gb': totalRAM / (1024.0 * 1024.0),
+            'used_ram_percent': (100 * usedRAM) / totalRAM if totalRAM > 0 else 0,
+            'total_swap_gb': totalSwap / (1024.0 * 1024.0),
+            'used_swap_percent': (100 * usedSwap) / totalSwap if totalSwap > 0 else 0
+        }
+    
+    def readTemp(self):
+        """Read temperature - exact system method"""
+        cpuTempPath = "/sys/class/thermal/thermal_zone0/temp"
+        cpuTemp = self.readTemperature(cpuTempPath)
+        fahrenheit = (cpuTemp * 9.0 / 5.0) + 32
+        return cpuTemp, fahrenheit
+    
+    def readFan(self):
+        """Read fan - exact system method"""
+        if not self.fanLoadPath or self.maxFan == 0:
+            return 0
+        
+        try:
+            with open(self.fanLoadPath, 'r') as f:
+                pwm_value = f.read().strip()
+                pwm = int(pwm_value)
+                percentage = (100 * pwm) // self.maxFan
+                return percentage
+        except:
+            return 0
+    
+    def readGPU(self):
+        """Read GPU - exact system method"""
+        load, maxFrequency = self.readGPULoad()
+        
+        if load != -1 and maxFrequency != -1:
+            maxFrequencyGHz = maxFrequency / 1000000000.0  # Convert to GHz
+            return load, maxFrequencyGHz
+        else:
+            return 0, 0
+    
+    def readRGALoad(self):
+        """Read RGA load - exact system method"""
+        loads = []
+        load_data = self.readRgaLoad()
+        
+        if not load_data:
+            return loads
+        
+        # Parse RGA load data
+        for line in load_data.split('\n'):
+            if "load =" in line and "== load ==" not in line:
+                pos = line.find("=")
+                load_str = line[pos + 1:]
+                load_str = load_str[:load_str.find("%")]
+                loads.append(int(load_str))
+        
+        return loads
+    
+    def get_accurate_power_readings(self):
+        """Get accurate power readings using the exact method specified"""
+        try:
+            # Use the exact method: awk '{printf ("%0.2f\n",$1/172.5); }' /sys/bus/iio/devices/iio:device0/in_voltage6_raw
+            result = subprocess.run(['awk', '{printf ("%0.2f\\n",$1/172.5); }', '/sys/bus/iio/devices/iio:device0/in_voltage6_raw'],
+                                  capture_output=True, text=True, timeout=2)
+            
+            if result.returncode == 0:
+                voltage_input = float(result.stdout.strip())
+                power_source = "ADC Channel 6 (Exact Method)"
+            else:
+                voltage_input = 0
+                power_source = "ADC Error"
+            
+            # Current and power not measured
+            current_input = 0
+            power_input = 0
+            
+            return {
+                'voltage_input': voltage_input,
+                'current_input': current_input,
+                'power_input': power_input,
+                'power_source': power_source
+            }
+        except Exception as e:
+            return {
+                'voltage_input': 0,
+                'current_input': 0,
+                'power_input': 0,
+                'power_source': f'Error: {str(e)}'
+            }
     
     def get_watchdog_info(self):
-        """Get watchdog resets and crash counts"""
+        """Get watchdog status and crash information"""
         try:
-            # Check watchdog status - try multiple paths
-            watchdog_status = "Not available"
-            watchdog_paths = [
-                '/proc/watchdog',
-                '/dev/watchdog',
-                '/sys/class/watchdog/watchdog0/status',
-                '/sys/class/watchdog/watchdog0/timeout'
-            ]
-            
-            for path in watchdog_paths:
-                try:
-                    if path == '/proc/watchdog':
-                        with open(path, 'r') as f:
-                            watchdog_status = f.read().strip()
-                            if watchdog_status:
-                                break
-                    elif path == '/dev/watchdog':
-                        if os.path.exists(path):
-                            watchdog_status = "Device available"
-                            break
-                    else:
-                        with open(path, 'r') as f:
-                            value = f.read().strip()
-                            if path.endswith('status'):
-                                watchdog_status = f"Status: {value}"
-                            elif path.endswith('timeout'):
-                                watchdog_status = f"Timeout: {value}s"
-                            break
-                except:
-                    continue
-            
             # Check watchdog service status
-            try:
-                result = subprocess.run(['systemctl', 'is-active', 'watchdog'], 
-                                      capture_output=True, text=True, timeout=2)
-                if result.returncode == 0 and result.stdout.strip() == 'active':
-                    watchdog_status = f"{watchdog_status} (Service: Active)"
-                elif result.stdout.strip() == 'inactive':
-                    watchdog_status = f"{watchdog_status} (Service: Inactive)"
-            except:
-                pass
+            result = subprocess.run(['systemctl', 'is-active', 'watchdog'], 
+                                  capture_output=True, text=True, timeout=2)
+            watchdog_status = result.stdout.strip()
             
-            # Check for crash logs
-            crash_count = 0
-            try:
-                # Check dmesg for crash indicators
-                result = subprocess.run(['dmesg', '-T'], capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    crash_indicators = ['Kernel panic', 'Oops', 'segfault', 'crash', 'watchdog']
-                    for line in result.stdout.split('\n'):
-                        if any(indicator in line.lower() for indicator in crash_indicators):
-                            crash_count += 1
-            except:
-                pass
+            # Try to start watchdog if inactive
+            if watchdog_status == "inactive":
+                try:
+                    subprocess.run(['sudo', 'systemctl', 'start', 'watchdog'], 
+                                  capture_output=True, timeout=2)
+                    watchdog_status = "starting"
+                except:
+                    pass
             
-            # Check system logs for crashes
+            # Get crash count from dmesg
             try:
-                result = subprocess.run(['journalctl', '--since', '1 hour ago', '--no-pager'], 
-                                      capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    crash_indicators = ['crash', 'panic', 'segfault', 'killed']
-                    for line in result.stdout.split('\n'):
-                        if any(indicator in line.lower() for indicator in crash_indicators):
-                            crash_count += 1
+                result = subprocess.run(['dmesg', '|', 'grep', '-i', 'crash', '|', 'wc', '-l'], 
+                                      shell=True, capture_output=True, text=True, timeout=2)
+                crash_count = int(result.stdout.strip())
+                
+                # Apply heuristic to reset false positives
+                if crash_count > 10:
+                    crash_count = 0
+                    self.crash_count = 0
+                else:
+                    self.crash_count = crash_count
             except:
-                pass
+                crash_count = self.crash_count
             
             return {
                 'watchdog_status': watchdog_status,
@@ -471,41 +566,11 @@ class YTop:
                 'watchdog_resets': self.watchdog_resets
             }
         except:
-            return {'watchdog_status': 'Unknown', 'crash_count': 0, 'watchdog_resets': 0}
-    
-    def get_opencl_info(self):
-        """Get OpenCL information"""
-        try:
-            import subprocess
-            result = subprocess.run(['clinfo'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                # Parse OpenCL info
-                output = result.stdout
-                if 'ARM Platform' in output:
-                    return {
-                        'available': True,
-                        'platform': 'ARM Platform',
-                        'version': 'OpenCL 3.0 (Mali)'
-                    }
-            return {'available': False, 'platform': 'None', 'version': 'None'}
-        except:
-            return {'available': False, 'platform': 'None', 'version': 'None'}
-    
-    def get_vulkan_info(self):
-        """Get Vulkan information"""
-        try:
-            import subprocess
-            result = subprocess.run(['vulkaninfo', '--summary'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                output = result.stdout
-                if 'Mali' in output or 'ARM' in output:
-                    return {
-                        'available': True,
-                        'driver': 'Mali Vulkan Driver'
-                    }
-            return {'available': False, 'driver': 'None'}
-        except:
-            return {'available': False, 'driver': 'None'}
+            return {
+                'watchdog_status': 'unknown',
+                'crash_count': self.crash_count,
+                'watchdog_resets': self.watchdog_resets
+            }
     
     def create_bar(self, percentage, width=20):
         """Create a visual progress bar"""
@@ -520,101 +585,145 @@ class YTop:
                 # Clear screen
                 os.system('clear')
                 
-                # Get all system information
-                cpu_info = self.get_cpu_info()
-                sensor_info = self.get_sensor_info()
-                mem_info = self.get_memory_info()
-                npu_info = self.get_npu_info()
-                gpu_info = self.get_gpu_info()
-                power_info = self.get_power_info()
-                watchdog_info = self.get_watchdog_info()
-                opencl_info = self.get_opencl_info()
-                vulkan_info = self.get_vulkan_info()
+                # Read all system information using exact methods
+                cpuLoad = self.readCPULoad()
+                cpuFreq = self.readCPUFreq()
+                ramInfo = self.readRAM()
+                cpuTemp, tempF = self.readTemp()
+                fanPercent = self.readFan()
+                gpuLoad, gpuFreq = self.readGPU()
+                npuFreq = self.readNPUFreq()
+                rgaLoads = self.readRGALoad()
+                powerInfo = self.get_accurate_power_readings()
+                watchdogInfo = self.get_watchdog_info()
+                npuProcesses = self.getNPUProcesses()
                 
                 # Display header
-                print(f"{Colors.BOLD}{Colors.CYAN}YSuite v{SUITE_VERSION} - System Monitor{Colors.END}")
+                print(f"{Colors.BOLD}{Colors.CYAN}{self.socName} - {SUITE_NAME} v{SUITE_VERSION}{Colors.END}")
                 print(f"{Colors.YELLOW}Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.END}")
                 print("=" * 60)
                 
                 # CPU Information
                 print(f"\n{Colors.BOLD}{Colors.GREEN}CPU Information:{Colors.END}")
-                print(f"Total Load: {cpu_info['total_load']}% | Avg Freq: {cpu_info['avg_freq']} MHz")
-                print(f"{self.create_bar(cpu_info['total_load'])}")
+                totalLoad = sum(cpuLoad[:self.nrCPUs]) / self.nrCPUs
+                avgFreq = sum(cpuFreq[:self.nrCPUs]) / self.nrCPUs
+                print(f"Total Load: {totalLoad:.1f}% | Avg Freq: {avgFreq:.2f} GHz")
+                print(f"{self.create_bar(totalLoad)}")
                 
                 # Individual CPU cores
                 print(f"\n{Colors.BOLD}Individual Cores:{Colors.END}")
-                for core in cpu_info['cores']:
-                    bar = self.create_bar(core['load'], 15)
-                    print(f"  Core {core['core']}: {core['load']:5.1f}% | {core['freq']:4d} MHz | {bar}")
+                for i in range(self.nrCPUs):
+                    bar = self.create_bar(cpuLoad[i], 15)
+                    print(f"  Core {i}: {cpuLoad[i]:5.1f}% | {cpuFreq[i]:4.2f} GHz | {bar}")
                 
                 # Memory Information
                 print(f"\n{Colors.BOLD}{Colors.BLUE}Memory Information:{Colors.END}")
-                print(f"RAM: {mem_info['used']}/{mem_info['total']} MB ({mem_info['usage_percent']}%)")
-                print(f"{self.create_bar(mem_info['usage_percent'])}")
-                if mem_info['swap_total'] > 0:
-                    print(f"Swap: {mem_info['swap_used']}/{mem_info['swap_total']} MB ({mem_info['swap_usage_percent']}%)")
+                print(f"RAM: {ramInfo['used_ram_percent']:.1f}% | {ramInfo['total_ram_gb']:.2f} GB")
+                print(f"{self.create_bar(ramInfo['used_ram_percent'])}")
+                if ramInfo['total_swap_gb'] > 0:
+                    print(f"Swap: {ramInfo['used_swap_percent']:.1f}% | {ramInfo['total_swap_gb']:.2f} GB")
                 
-                # NPU Information
+                # NPU Information with processes
                 print(f"\n{Colors.BOLD}{Colors.MAGENTA}NPU Information:{Colors.END}")
-                print(f"Total Load: {npu_info['total_load']}% | Freq: {npu_info['avg_freq']} MHz")
-                for core in npu_info['cores']:
-                    bar = self.create_bar(core['load'], 15)
-                    print(f"  {core['core']}: {core['load']:5.1f}% | {core['freq']:4d} MHz | {bar}")
+                npu_loads = []
+                load_data = self.readNpuLoad()
                 
-                # NPU Processes
-                npu_processes = self.get_npu_processes()
-                if npu_processes:
-                    print(f"  {Colors.YELLOW}Active Processes:{Colors.END} {', '.join(npu_processes)}")
+                if load_data:
+                    # Parse NPU loads using the exact method from rtop
+                    if "Core" in load_data:
+                        # Multi-core format: "Core0: X%, Core1: Y%, Core2: Z%"
+                        pos0 = load_data.find("Core0:")
+                        pos1 = load_data.find("Core1:")
+                        pos2 = load_data.find("Core2:")
+                        
+                        if pos0 != -1:
+                            try:
+                                sub = load_data[pos0 + 6:pos0 + 9]
+                                npu_loads.append(int(sub))
+                            except:
+                                npu_loads.append(0)
+                        if pos1 != -1:
+                            try:
+                                sub = load_data[pos1 + 6:pos1 + 9]
+                                npu_loads.append(int(sub))
+                            except:
+                                npu_loads.append(0)
+                        if pos2 != -1:
+                            try:
+                                sub = load_data[pos2 + 6:pos2 + 9]
+                                npu_loads.append(int(sub))
+                            except:
+                                npu_loads.append(0)
+                    else:
+                        # Single load format: "X%"
+                        pos = load_data.find("%")
+                        if pos != -1:
+                            try:
+                                sub = load_data[pos - 2:pos + 1]
+                                npu_loads.append(int(sub))
+                            except:
+                                npu_loads.append(0)
+                
+                # Update NPU count based on actual data
+                self.nrNPUs = len(npu_loads)
+                
+                if self.nrNPUs > 0:
+                    total_npu_load = sum(npu_loads) / len(npu_loads) if npu_loads else 0
+                    print(f"NPU Cores: {self.nrNPUs} | Freq: {npuFreq:.2f} GHz | Load: {total_npu_load:.1f}%")
+                    
+                    for i, load in enumerate(npu_loads):
+                        bar = self.create_bar(load, 15)
+                        print(f"  NPU {i}: {load:5.1f}% | {npuFreq:4.2f} GHz | {bar}")
+                    
+                    # Show NPU processes
+                    if npuProcesses:
+                        print(f"  Active Processes: {', '.join(npuProcesses[:5])}")
                 else:
-                    print(f"  {Colors.YELLOW}Active Processes:{Colors.END} None")
+                    print("  No NPU cores detected or NPU not enabled")
+                    print("  To enable NPU, run: sudo modprobe rknpu")
                 
                 # GPU Information
-                print(f"\n{Colors.BOLD}{Colors.YELLOW}GPU Information:{Colors.END}")
-                gpu_bar = self.create_bar(gpu_info['load'], 20)
-                print(f"Load: {gpu_info['load']:5.1f}% | Freq: {gpu_info['freq']:4d} MHz")
-                print(f"{gpu_bar}")
+                if self.gpuLoadPath:
+                    print(f"\n{Colors.BOLD}{Colors.YELLOW}GPU Information:{Colors.END}")
+                    gpu_bar = self.create_bar(gpuLoad, 20)
+                    print(f"Load: {gpuLoad:5.1f}% | Freq: {gpuFreq:4.2f} GHz")
+                    print(f"{gpu_bar}")
                 
-                # OpenCL and Vulkan Information
-                print(f"\n{Colors.BOLD}{Colors.MAGENTA}GPU Compute:{Colors.END}")
-                if opencl_info['available']:
-                    print(f"  OpenCL: ✅ {opencl_info['platform']} ({opencl_info['version']})")
+                # RGA Information
+                if self.nrRGAs > 0:
+                    print(f"\n{Colors.BOLD}{Colors.CYAN}RGA Information:{Colors.END}")
+                    print(f"RGA Cores: {self.nrRGAs}")
+                    for i, load in enumerate(rgaLoads[:self.nrRGAs]):
+                        print(f"  RGA {i+1}: {load}%")
+                
+                # Power Information
+                print(f"\n{Colors.BOLD}{Colors.GREEN}Power Information:{Colors.END}")
+                if powerInfo is not None:
+                    print(f"  Voltage: {powerInfo.get('voltage_input', 0):.2f}V")
+                    print(f"  Current: {powerInfo.get('current_input', 0):.2f}A")
+                    print(f"  Power: {powerInfo.get('power_input', 0):.2f}W")
+                    print(f"  Source: {powerInfo.get('power_source', 'Unknown')}")
                 else:
-                    print(f"  OpenCL: ❌ Not available")
-                if vulkan_info['available']:
-                    print(f"  Vulkan: ✅ {vulkan_info['driver']}")
-                else:
-                    print(f"  Vulkan: ❌ Not available")
+                    print(f"  Voltage: 0.00V")
+                    print(f"  Current: 0.00A")
+                    print(f"  Power: 0.00W")
+                    print(f"  Source: Error: No power data")
                 
                 # Temperature and Sensors
                 print(f"\n{Colors.BOLD}{Colors.RED}Temperature & Sensors:{Colors.END}")
-                for sensor, value in sensor_info.items():
-                    if 'temp' in sensor:
-                        print(f"  {sensor}: {value}°C")
-                    elif 'fan' in sensor:
-                        print(f"  Fan State: {value}")
-                    elif 'adc' in sensor:
-                        print(f"  ADC Voltage: {value}V")
+                print(f"  CPU Temp: {cpuTemp:.1f}°C ({tempF:.0f}°F)")
+                if self.maxFan > 0:
+                    print(f"  Fan: {fanPercent}%")
                 
-                # Power Information
-                print(f"\n{Colors.BOLD}{Colors.CYAN}Power Information:{Colors.END}")
-                if power_info['voltage_input'] > 0:
-                    print(f"  Input Voltage: {power_info['voltage_input']}V")
-                    print(f"  Input Current: {power_info['current_input']}A")
-                    print(f"  Input Power: {power_info['power_input']}W")
-                    print(f"  Source: {power_info['power_source']}")
-                    # Add power recommendations
-                    if power_info['power_input'] < 20 and 'USB-C' in power_info['power_source']:
-                        print(f"  {Colors.YELLOW}💡 Tip: Try 45W+ PD charger for optimal performance{Colors.END}")
-                elif power_info['voltage_input'] == 0 and power_info['current_input'] == 0:
-                    print(f"  No power source detected.")
-                    print(f"  {Colors.RED}🔌 Power Port Issue: Try display Type-C port or different charger{Colors.END}")
-                    print(f"  {Colors.YELLOW}💡 Recommendation: Use 45W PD charger on display port{Colors.END}")
+                # Voltage reading using exact method
+                voltage_reading = self.get_voltage_reading()
+                print(f"  Input Voltage: {voltage_reading:.2f}V (ADC Channel 6)")
                 
-                # Watchdog and Crash Information
-                print(f"\n{Colors.BOLD}{Colors.RED}System Health:{Colors.END}")
-                print(f"  Watchdog Status: {watchdog_info['watchdog_status']}")
-                print(f"  Crash Count: {watchdog_info['crash_count']}")
-                print(f"  Watchdog Resets: {watchdog_info['watchdog_resets']}")
+                # Watchdog Information
+                print(f"\n{Colors.BOLD}{Colors.MAGENTA}Watchdog Information:{Colors.END}")
+                print(f"  Status: {watchdogInfo['watchdog_status']}")
+                print(f"  Crash Count: {watchdogInfo['crash_count']}")
+                print(f"  Resets: {watchdogInfo['watchdog_resets']}")
                 
                 # Footer
                 print(f"\n{Colors.YELLOW}Press Ctrl+C to exit{Colors.END}")
@@ -634,25 +743,89 @@ class YTop:
         self.running = True
         self.display_stats(interval)
 
-class YLog:
-    """System log monitoring and classification"""
+class YPower:
+    """Power monitoring and management"""
     
     def __init__(self):
-        self.log_file = LOG_DIR / "system_logs.json"
-        self.critical_patterns = [
-            'error', 'fail', 'critical', 'panic', 'segfault', 'oom',
-            'timeout', 'corruption', 'invalid', 'unexpected'
-        ]
-        
-    def monitor_logs(self):
-        """Monitor system logs in real-time"""
-        print(f"{Colors.BOLD}{Colors.CYAN}📋 YLog - System Log Monitor{Colors.END}")
-        print(f"{Colors.YELLOW}Monitoring system logs for critical events...{Colors.END}")
-        print(f"Log file: {self.log_file}")
-        print()
+        self.ytop = YTop()
+    
+    def monitor_power(self):
+        """Monitor power input in real-time"""
+        print(f"{Colors.BOLD}{Colors.CYAN}Power Monitoring - {SUITE_NAME} v{SUITE_VERSION}{Colors.END}")
+        print(f"{Colors.YELLOW}Press Ctrl+C to exit{Colors.END}")
+        print("=" * 50)
         
         try:
-            # Monitor journalctl for new entries
+            while True:
+                # Get power information
+                power_info = self.ytop.get_accurate_power_readings()
+                
+                # Ensure power_info is not None and has required keys
+                if power_info is None:
+                    power_info = {
+                        'voltage_input': 0,
+                        'current_input': 0,
+                        'power_input': 0,
+                        'power_source': 'Error: No power data'
+                    }
+                
+                voltage = power_info.get('voltage_input', 0)
+                current = power_info.get('current_input', 0)
+                power = power_info.get('power_input', 0)
+                power_source = power_info.get('power_source', 'Unknown')
+                
+                # Clear line and display power info
+                print(f"\r{Colors.GREEN}Voltage: {voltage:.2f}V | Current: {current:.2f}A | Power: {power:.2f}W | Source: {power_source}{Colors.END}", end='', flush=True)
+                
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            print(f"\n{Colors.GREEN}Power monitoring stopped.{Colors.END}")
+
+class YWatchdog:
+    """Watchdog monitoring and management"""
+    
+    def __init__(self):
+        self.ytop = YTop()
+    
+    def monitor_watchdog(self):
+        """Monitor watchdog status"""
+        print(f"{Colors.BOLD}{Colors.CYAN}Watchdog Monitoring - {SUITE_NAME} v{SUITE_VERSION}{Colors.END}")
+        print(f"{Colors.YELLOW}Press Ctrl+C to exit{Colors.END}")
+        print("=" * 50)
+        
+        try:
+            while True:
+                # Get watchdog information
+                watchdog_info = self.ytop.get_watchdog_info()
+                
+                status = watchdog_info['watchdog_status']
+                crash_count = watchdog_info['crash_count']
+                resets = watchdog_info['watchdog_resets']
+                
+                # Clear line and display watchdog info
+                status_color = Colors.GREEN if status == "active" else Colors.RED
+                print(f"\r{status_color}Status: {status} | Crashes: {crash_count} | Resets: {resets}{Colors.END}", end='', flush=True)
+                
+                time.sleep(2)
+                
+        except KeyboardInterrupt:
+            print(f"\n{Colors.GREEN}Watchdog monitoring stopped.{Colors.END}")
+
+class YLog:
+    """System log monitoring and analysis"""
+    
+    def __init__(self):
+        self.log_file = LOG_DIR / "system.log"
+    
+    def monitor_logs(self):
+        """Monitor system logs in real-time"""
+        print(f"{Colors.BOLD}{Colors.CYAN}System Log Monitoring - {SUITE_NAME} v{SUITE_VERSION}{Colors.END}")
+        print(f"{Colors.YELLOW}Press Ctrl+C to exit{Colors.END}")
+        print("=" * 50)
+        
+        try:
+            # Start journalctl to monitor logs
             process = subprocess.Popen(
                 ['journalctl', '-f', '--no-pager'],
                 stdout=subprocess.PIPE,
@@ -664,391 +837,83 @@ class YLog:
                 line = process.stdout.readline()
                 if not line:
                     break
-                    
-                # Check for critical patterns
-                if any(pattern in line.lower() for pattern in self.critical_patterns):
-                    self.log_critical_event(line.strip())
-                    print(f"{Colors.RED}🚨 CRITICAL: {line.strip()}{Colors.END}")
-                    
+                
+                # Color code different log levels
+                if "ERROR" in line:
+                    print(f"{Colors.RED}{line.strip()}{Colors.END}")
+                elif "WARNING" in line:
+                    print(f"{Colors.YELLOW}{line.strip()}{Colors.END}")
+                elif "INFO" in line:
+                    print(f"{Colors.GREEN}{line.strip()}{Colors.END}")
+                else:
+                    print(line.strip())
+                
         except KeyboardInterrupt:
-            print(f"\n{Colors.YELLOW}Log monitoring stopped.{Colors.END}")
-            
-    def log_critical_event(self, message):
-        """Log critical events to JSON file"""
-        event = {
-            'timestamp': datetime.now().isoformat(),
-            'message': message,
-            'severity': 'critical',
-            'source': 'system_log'
-        }
-        
-        # Load existing logs
-        logs = []
-        if self.log_file.exists():
-            try:
-                with open(self.log_file, 'r') as f:
-                    logs = json.load(f)
-            except:
-                logs = []
-        
-        # Add new event
-        logs.append(event)
-        
-        # Keep only last 1000 events
-        if len(logs) > 1000:
-            logs = logs[-1000:]
-        
-        # Save to file
-        with open(self.log_file, 'w') as f:
-            json.dump(logs, f, indent=2)
-    
-    def show_summary(self):
-        """Show log summary"""
-        print(f"{Colors.BOLD}{Colors.CYAN}📊 Log Summary{Colors.END}")
-        
-        # Check for existing log file
-        if self.log_file.exists():
-            try:
-                with open(self.log_file, 'r') as f:
-                    logs = json.load(f)
-                
-                print(f"Total events: {len(logs)}")
-                
-                # Count by severity
-                critical_count = len([log for log in logs if log.get('severity') == 'critical'])
-                print(f"Critical events: {critical_count}")
-                
-                # Show recent events
-                if logs:
-                    print(f"\n{Colors.BOLD}Recent Critical Events:{Colors.END}")
-                    recent_logs = logs[-10:]  # Last 10 events
-                    for log in recent_logs:
-                        timestamp = log['timestamp'][:19]  # Remove microseconds
-                        print(f"{Colors.RED}{timestamp}: {log['message'][:80]}...{Colors.END}")
-            except Exception as e:
-                print(f"{Colors.YELLOW}Error reading log file: {e}{Colors.END}")
-        
-        # Scan current system logs for recent critical events
-        print(f"\n{Colors.BOLD}Recent System Logs (Last Hour):{Colors.END}")
-        try:
-            result = subprocess.run(['journalctl', '--since', '1 hour ago', '--no-pager'], 
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                critical_count = 0
-                for line in result.stdout.split('\n'):
-                    if any(pattern in line.lower() for pattern in self.critical_patterns):
-                        critical_count += 1
-                        if critical_count <= 5:  # Show first 5 critical events
-                            print(f"{Colors.RED}🚨 {line[:100]}...{Colors.END}")
-                
-                if critical_count == 0:
-                    print(f"{Colors.GREEN}✅ No critical events found in the last hour{Colors.END}")
-                elif critical_count > 5:
-                    print(f"{Colors.YELLOW}... and {critical_count - 5} more critical events{Colors.END}")
-        except Exception as e:
-            print(f"{Colors.YELLOW}Error scanning system logs: {e}{Colors.END}")
-        
-        print(f"\n{Colors.BOLD}Log file location: {self.log_file}{Colors.END}")
-        print(f"Use 'ylog -r' for real-time monitoring")
+            print(f"\n{Colors.GREEN}Log monitoring stopped.{Colors.END}")
+            if 'process' in locals():
+                process.terminate()
 
 class YCrash:
     """Crash detection and analysis"""
     
     def __init__(self):
-        self.crash_file = DATA_DIR / "crashes.json"
-        self.crash_patterns = [
-            'segmentation fault', 'core dumped', 'killed', 'oom',
-            'panic', 'fatal', 'abort', 'assertion failed'
-        ]
-        
+        self.crash_log = LOG_DIR / "crashes.log"
+    
     def monitor_crashes(self):
-        """Monitor for crash events"""
-        print(f"{Colors.BOLD}{Colors.RED}💥 YCrash - Crash Monitor{Colors.END}")
-        print(f"{Colors.YELLOW}Monitoring for system crashes and critical failures...{Colors.END}")
-        print(f"Crash file: {self.crash_file}")
-        print()
+        """Monitor for system crashes"""
+        print(f"{Colors.BOLD}{Colors.CYAN}Crash Detection - {SUITE_NAME} v{SUITE_VERSION}{Colors.END}")
+        print(f"{Colors.YELLOW}Press Ctrl+C to exit{Colors.END}")
+        print("=" * 50)
         
-        # Monitor dmesg for crash events
         try:
-            process = subprocess.Popen(
-                ['dmesg', '-w'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
             while True:
-                line = process.stdout.readline()
-                if not line:
-                    break
-                    
-                # Check for crash patterns
-                if any(pattern in line.lower() for pattern in self.crash_patterns):
-                    self.log_crash_event(line.strip())
-                    print(f"{Colors.RED}💥 CRASH DETECTED: {line.strip()}{Colors.END}")
-                    
-        except KeyboardInterrupt:
-            print(f"\n{Colors.YELLOW}Crash monitoring stopped.{Colors.END}")
-    
-    def log_crash_event(self, message):
-        """Log crash events to JSON file"""
-        crash = {
-            'timestamp': datetime.now().isoformat(),
-            'message': message,
-            'type': 'crash',
-            'source': 'kernel'
-        }
-        
-        # Load existing crashes
-        crashes = []
-        if self.crash_file.exists():
-            try:
-                with open(self.crash_file, 'r') as f:
-                    crashes = json.load(f)
-            except:
-                crashes = []
-        
-        # Add new crash
-        crashes.append(crash)
-        
-        # Keep only last 100 crashes
-        if len(crashes) > 100:
-            crashes = crashes[-100:]
-        
-        # Save to file
-        with open(self.crash_file, 'w') as f:
-            json.dump(crashes, f, indent=2)
-    
-    def show_summary(self):
-        """Show crash summary"""
-        print(f"{Colors.BOLD}{Colors.RED}💥 Crash Summary{Colors.END}")
-        
-        # Check for existing crash file
-        if self.crash_file.exists():
-            try:
-                with open(self.crash_file, 'r') as f:
-                    crashes = json.load(f)
+                # Check for crash indicators
+                crash_indicators = []
                 
-                print(f"Total crashes: {len(crashes)}")
-                
-                # Show recent crashes
-                if crashes:
-                    print(f"\n{Colors.BOLD}Recent Crashes:{Colors.END}")
-                    recent_crashes = crashes[-5:]  # Last 5 crashes
-                    for crash in recent_crashes:
-                        timestamp = crash['timestamp'][:19]
-                        print(f"{Colors.RED}{timestamp}: {crash['message'][:80]}...{Colors.END}")
-            except Exception as e:
-                print(f"{Colors.YELLOW}Error reading crash file: {e}{Colors.END}")
-        
-        # Scan current dmesg for recent crash events
-        print(f"\n{Colors.BOLD}Recent Kernel Messages (Last Hour):{Colors.END}")
-        try:
-            result = subprocess.run(['dmesg', '-T'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                crash_count = 0
-                for line in result.stdout.split('\n'):
-                    if any(pattern in line.lower() for pattern in self.crash_patterns):
-                        crash_count += 1
-                        if crash_count <= 5:  # Show first 5 crash events
-                            print(f"{Colors.RED}💥 {line[:100]}...{Colors.END}")
-                
-                if crash_count == 0:
-                    print(f"{Colors.GREEN}✅ No crash events found in recent kernel messages{Colors.END}")
-                elif crash_count > 5:
-                    print(f"{Colors.YELLOW}... and {crash_count - 5} more crash events{Colors.END}")
-        except Exception as e:
-            print(f"{Colors.YELLOW}Error scanning kernel messages: {e}{Colors.END}")
-        
-        print(f"\n{Colors.BOLD}Crash file location: {self.crash_file}{Colors.END}")
-        print(f"Use 'ycrash -r' for real-time monitoring")
-
-class YPower:
-    """Power monitoring and USB PD negotiation"""
-    
-    def __init__(self):
-        self.power_file = DATA_DIR / "power_data.json"
-        
-    def get_adc_voltage(self):
-        """Get voltage from ADC"""
-        try:
-            with open('/sys/devices/platform/fec10000.saradc/iio:device0/in_voltage6_raw', 'r') as f:
-                raw_value = int(f.read().strip())
-            # Convert to voltage (approximate conversion)
-            voltage = (raw_value / 4095) * 3.3 * 3  # Assuming 3.3V reference and voltage divider
-            return round(voltage, 2)
-        except:
-            return 0
-    
-    def get_pd_info(self):
-        """Get USB PD information"""
-        pd_info = {
-            'online': False,
-            'voltage': 0,
-            'current': 0,
-            'pd_capable': False,
-            'role': 'unknown'
-        }
-        
-        try:
-            # Check if PD supply is online
-            with open('/sys/class/power_supply/usb-c0/online', 'r') as f:
-                pd_info['online'] = bool(int(f.read().strip()))
-            
-            if pd_info['online']:
-                # Get voltage and current
-                with open('/sys/class/power_supply/usb-c0/voltage_now', 'r') as f:
-                    pd_info['voltage'] = int(f.read().strip()) / 1000000  # Convert to V
-                    
-                with open('/sys/class/power_supply/usb-c0/current_now', 'r') as f:
-                    pd_info['current'] = int(f.read().strip()) / 1000  # Convert to mA
-                
-                # Check if PD capable
+                # Check dmesg for crash messages
                 try:
-                    with open('/sys/class/typec/port0/power_role', 'r') as f:
-                        pd_info['role'] = f.read().strip()
-                        pd_info['pd_capable'] = True
+                    result = subprocess.run(['dmesg', '|', 'grep', '-i', 'crash'], 
+                                          shell=True, capture_output=True, text=True, timeout=2)
+                    if result.stdout.strip():
+                        crash_indicators.append(f"Kernel crashes: {result.stdout.strip()}")
                 except:
-                    pd_info['pd_capable'] = False
-                    
-        except:
-            pass
-            
-        return pd_info
-    
-    def negotiate_3a_current(self):
-        """Attempt to negotiate 3A current"""
-        try:
-            # Try to set preferred role to sink
-            subprocess.run(['sudo', 'bash', '-c', 
-                          'echo sink > /sys/class/typec/port0/preferred_role'], 
-                          capture_output=True)
-            
-            # Try to initiate power role swap
-            subprocess.run(['sudo', 'bash', '-c', 
-                          'echo 1 > /sys/class/typec/port0/pr_swap'], 
-                          capture_output=True)
-            
-            print(f"{Colors.GREEN}✅ PD negotiation attempted{Colors.END}")
-            
-        except Exception as e:
-            print(f"{Colors.RED}❌ PD negotiation failed: {e}{Colors.END}")
-    
-    def estimate_current(self):
-        """Estimate current based on system load"""
-        try:
-            # Get CPU load
-            with open('/proc/stat', 'r') as f:
-                lines = f.readlines()
-                cpu_line = lines[0].split()[1:]
-                total = sum(int(x) for x in cpu_line)
-                idle = int(cpu_line[3])
-                load = 100 - (idle * 100 / total)
-            
-            # Estimate current based on load (rough approximation)
-            # Base current ~500mA, max current ~3A
-            base_current = 0.5
-            max_current = 3.0
-            estimated_current = base_current + (load / 100) * (max_current - base_current)
-            
-            return round(estimated_current, 2)
-        except:
-            return 0.5
-    
-    def monitor_power(self):
-        """Monitor power in real-time"""
-        print(f"{Colors.BOLD}{Colors.GREEN}⚡ YPower - Power Monitor{Colors.END}")
-        print(f"{Colors.YELLOW}Monitoring power input and attempting PD negotiation...{Colors.END}")
-        print(f"Power file: {self.power_file}")
-        print()
-        
-        try:
-            while True:
-                # Get accurate power readings from YTop
-                ytop = YTop()
-                power_info = ytop.get_accurate_power_readings()
+                    pass
                 
-                voltage = power_info['voltage_input']
-                current = power_info['current_input']
-                power = power_info['power_input']
-                power_source = power_info['power_source']
+                # Check for OOM killer
+                try:
+                    result = subprocess.run(['dmesg', '|', 'grep', '-i', 'killed'], 
+                                          shell=True, capture_output=True, text=True, timeout=2)
+                    if result.stdout.strip():
+                        crash_indicators.append(f"OOM kills: {result.stdout.strip()}")
+                except:
+                    pass
                 
-                # Get PD information for display
-                pd_info = self.get_pd_info()
+                # Check for systemd failures
+                try:
+                    result = subprocess.run(['systemctl', '--failed'], 
+                                          capture_output=True, text=True, timeout=2)
+                    if "failed" in result.stdout:
+                        crash_indicators.append("Systemd service failures detected")
+                except:
+                    pass
                 
-                # Display information
-                os.system('clear')
-                print(f"{Colors.BOLD}{Colors.GREEN}╔══════════════════════════════════════════════════════════════════════════════╗{Colors.END}")
-                print(f"{Colors.BOLD}{Colors.GREEN}║                              YPower - Power Monitor                          ║{Colors.END}")
-                print(f"{Colors.BOLD}{Colors.GREEN}╚══════════════════════════════════════════════════════════════════════════════╝{Colors.END}")
-                print()
+                # Display results
+                if crash_indicators:
+                    print(f"\r{Colors.RED}⚠️  CRASHES DETECTED:{Colors.END}")
+                    for indicator in crash_indicators:
+                        print(f"  {indicator}")
+                else:
+                    print(f"\r{Colors.GREEN}✅ No crashes detected{Colors.END}", end='', flush=True)
                 
-                print(f"{Colors.BOLD}🔌 Power Source:{Colors.END} {power_source}")
-                print(f"{Colors.BOLD}⚡ Voltage:{Colors.END}      {voltage:5.2f} V")
-                print(f"{Colors.BOLD}🔋 Current:{Colors.END}      {current:5.2f} A")
-                print(f"{Colors.BOLD}💡 Power:{Colors.END}        {power:5.2f} W")
-                print()
-                
-                # PD Information
-                print(f"{Colors.BOLD}🔗 USB PD Status:{Colors.END}")
-                status_icon = "✅" if pd_info['online'] else "❌"
-                print(f"   Online:     {status_icon} {pd_info['online']}")
-                print(f"   PD Capable: {'✅' if pd_info['pd_capable'] else '❌'}")
-                print(f"   Role:       {pd_info['role']}")
-                print()
-                
-                # ADC Information
-                print(f"{Colors.BOLD}📊 ADC Reading:{Colors.END}")
-                print(f"   Raw ADC:    {voltage:5.2f} V")
-                print()
-                
-                # Footer
-                print(f"{Colors.BOLD}{Colors.GREEN}╔══════════════════════════════════════════════════════════════════════════════╗{Colors.END}")
-                print(f"{Colors.BOLD}{Colors.GREEN}║  Press Ctrl+C to exit | Press 'n' to negotiate 3A | {datetime.now().strftime('%H:%M:%S')} ║{Colors.END}")
-                print(f"{Colors.BOLD}{Colors.GREEN}╚══════════════════════════════════════════════════════════════════════════════╝{Colors.END}")
-                
-                # Log power data
-                self.log_power_data(voltage, current, power, power_source)
-                
-                time.sleep(2)
+                time.sleep(5)
                 
         except KeyboardInterrupt:
-            print(f"\n{Colors.YELLOW}Power monitoring stopped.{Colors.END}")
-    
-    def log_power_data(self, voltage, current, power, source):
-        """Log power data to JSON file"""
-        data = {
-            'timestamp': datetime.now().isoformat(),
-            'voltage': voltage,
-            'current': current,
-            'power': power,
-            'source': source
-        }
-        
-        # Load existing data
-        power_data = []
-        if self.power_file.exists():
-            try:
-                with open(self.power_file, 'r') as f:
-                    power_data = json.load(f)
-            except:
-                power_data = []
-        
-        # Add new data
-        power_data.append(data)
-        
-        # Keep only last 1000 entries
-        if len(power_data) > 1000:
-            power_data = power_data[-1000:]
-        
-        # Save to file
-        with open(self.power_file, 'w') as f:
-            json.dump(power_data, f, indent=2)
+            print(f"\n{Colors.GREEN}Crash monitoring stopped.{Colors.END}")
 
 def show_help():
     """Show comprehensive help for YSuite"""
     print(f"{Colors.BOLD}{Colors.CYAN}╔══════════════════════════════════════════════════════════════════════════════╗{Colors.END}")
-    print(f"{Colors.BOLD}{Colors.CYAN}║                              YSuite v{SUITE_VERSION} - Help                           ║{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}║                              {SUITE_NAME} v{SUITE_VERSION} - Help                           ║{Colors.END}")
     print(f"{Colors.BOLD}{Colors.CYAN}╚══════════════════════════════════════════════════════════════════════════════╝{Colors.END}")
     print()
     
@@ -1057,41 +922,36 @@ def show_help():
     
     print(f"{Colors.BOLD}{Colors.GREEN}ytop{Colors.END} - Real-time System Performance Monitor")
     print(f"   Usage: ytop [interval]")
-    print(f"   Description: CLI version of rtop for Rock 5B+")
-    print(f"   Features: CPU, GPU, NPU, Memory, Temperature, Fan monitoring")
+    print(f"   Description: Complete system monitoring with CPU, GPU, NPU, RGA, Memory, Power, Temperature")
+    print(f"   Features: Exact system methodology, dynamic hardware discovery, accurate readings")
     print(f"   Example: ytop 2  # Update every 2 seconds")
     print()
     
-    print(f"{Colors.BOLD}{Colors.BLUE}ylog{Colors.END} - System Log Monitor")
-    print(f"   Usage: ylog [--monitor|--summary]")
-    print(f"   Description: Monitor and classify system logs")
-    print(f"   Features: Real-time monitoring, critical event detection, JSON logging")
-    print(f"   Example: ylog --monitor  # Start real-time monitoring")
+    print(f"{Colors.BOLD}{Colors.MAGENTA}ypower{Colors.END} - Power Monitoring")
+    print(f"   Usage: ypower")
+    print(f"   Description: Real-time power input monitoring")
+    print(f"   Features: Voltage, current, power consumption, power source detection")
     print()
     
-    print(f"{Colors.BOLD}{Colors.RED}ycrash{Colors.END} - Crash Detection and Analysis")
-    print(f"   Usage: ycrash [--monitor|--summary]")
-    print(f"   Description: Detect and analyze system crashes")
-    print(f"   Features: Kernel crash detection, crash logging, analysis")
-    print(f"   Example: ycrash --summary  # Show crash summary")
+    print(f"{Colors.BOLD}{Colors.RED}ydog{Colors.END} - Watchdog Monitoring")
+    print(f"   Usage: ydog")
+    print(f"   Description: Watchdog service monitoring and crash detection")
+    print(f"   Features: Service status, crash count, automatic service management")
     print()
     
-    print(f"{Colors.BOLD}{Colors.GREEN}ypower{Colors.END} - Power Monitoring and PD Negotiation")
-    print(f"   Usage: ypower [--monitor|--negotiate]")
-    print(f"   Description: Monitor power input and negotiate USB PD")
-    print(f"   Features: Voltage/current monitoring, PD negotiation, ADC reading")
-    print(f"   Example: ypower --monitor  # Start power monitoring")
+    print(f"{Colors.BOLD}{Colors.BLUE}ylog{Colors.END} - System Log Monitoring")
+    print(f"   Usage: ylog")
+    print(f"   Description: Real-time system log monitoring")
+    print(f"   Features: Journalctl integration, color-coded log levels, live monitoring")
     print()
     
-    print(f"{Colors.BOLD}{Colors.YELLOW}ydog{Colors.END} - Watchdog Status and Monitoring")
-    print(f"   Usage: ydog [--status|-s|--monitor|-r]")
-    print(f"   Description: Check watchdog policies and monitor logs")
-    print(f"   Features: Service status, real-time logs, comprehensive verification")
-    print(f"   Example: ydog -s  # Show service status")
-    print(f"   Example: ydog -r  # Monitor logs in real-time")
+    print(f"{Colors.BOLD}{Colors.RED}ycrash{Colors.END} - Crash Detection")
+    print(f"   Usage: ycrash")
+    print(f"   Description: System crash detection and analysis")
+    print(f"   Features: Kernel crash detection, OOM killer monitoring, service failure detection")
     print()
     
-    print(f"{Colors.BOLD}{Colors.MAGENTA}yhelp{Colors.END} - Show this help message")
+    print(f"{Colors.BOLD}{Colors.CYAN}yhelp{Colors.END} - Show this help message")
     print()
     
     print(f"{Colors.BOLD}{Colors.CYAN}Data Storage:{Colors.END}")
@@ -1106,7 +966,7 @@ def show_help():
 
 def install_suite():
     """Install YSuite system-wide"""
-    print(f"{Colors.BOLD}{Colors.CYAN}Installing YSuite system-wide...{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}Installing {SUITE_NAME} system-wide...{Colors.END}")
     
     # Copy script to /usr/local/bin
     script_path = Path(__file__).resolve()
@@ -1115,10 +975,10 @@ def install_suite():
     try:
         shutil.copy2(script_path, install_path)
         os.chmod(install_path, 0o755)
-        print(f"{Colors.GREEN}✅ YSuite installed to {install_path}{Colors.END}")
+        print(f"{Colors.GREEN}✅ {SUITE_NAME} installed to {install_path}{Colors.END}")
         
         # Create symlinks for individual commands
-        commands = ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp', 'ydog']
+        commands = ['ytop', 'ypower', 'ydog', 'ylog', 'ycrash', 'yhelp']
         for cmd in commands:
             symlink_path = Path(f"/usr/local/bin/{cmd}")
             if symlink_path.exists():
@@ -1127,7 +987,7 @@ def install_suite():
             print(f"{Colors.GREEN}✅ Created symlink: {cmd}{Colors.END}")
             
         print(f"\n{Colors.BOLD}{Colors.GREEN}Installation complete!{Colors.END}")
-        print(f"You can now use: ytop, ylog, ycrash, ypower, yhelp, ydog")
+        print(f"You can now use: ytop, ypower, ydog, ylog, ycrash, yhelp")
         
     except Exception as e:
         print(f"{Colors.RED}❌ Installation failed: {e}{Colors.END}")
@@ -1139,7 +999,7 @@ def main():
     script_name = Path(sys.argv[0]).name
     
     # If called via symlink, use the symlink name as the command
-    if script_name in ['ytop', 'ylog', 'ycrash', 'ypower', 'yhelp', 'ydog']:
+    if script_name in ['ytop', 'ypower', 'ydog', 'ylog', 'ycrash', 'yhelp']:
         command = script_name
         # Remove the script name from sys.argv so subsequent parsing doesn't see it as an argument
         sys.argv = [sys.argv[0]] + sys.argv[1:]
@@ -1169,41 +1029,22 @@ def main():
             interval = int(sys.argv[1])
         ytop.run(interval)
         
-    elif command == 'ylog':
-        ylog = YLog()
-        if '--monitor' in sys.argv or '-r' in sys.argv:
-            ylog.monitor_logs()
-        else:
-            ylog.show_summary()
-            
-    elif command == 'ycrash':
-        ycrash = YCrash()
-        if '--monitor' in sys.argv or '-r' in sys.argv:
-            ycrash.monitor_crashes()
-        else:
-            ycrash.show_summary()
-            
     elif command == 'ypower':
         ypower = YPower()
-        if '--negotiate' in sys.argv or '-n' in sys.argv:
-            ypower.negotiate_3a_current()
-        elif '--monitor' in sys.argv or '-r' in sys.argv:
-            ypower.monitor_power()
-        else:
-            ypower.monitor_power()  # Default to monitoring
-            
+        ypower.monitor_power()
+        
     elif command == 'ydog':
-        # Handle ydog command with options
-        if '--status' in sys.argv or '-s' in sys.argv:
-            # Show service status
-            subprocess.run(['systemctl', 'status', 'watchdog-monitor.service'], check=False)
-        elif '--monitor' in sys.argv or '-r' in sys.argv:
-            # Monitor logs in real-time
-            subprocess.run(['tail', '-f', '/var/log/watchdog_monitor.log'], check=False)
-        else:
-            # Default: run comprehensive status check
-            subprocess.run(['/usr/local/bin/check_watchdog_status.sh'], check=False)
-            
+        ydog = YWatchdog()
+        ydog.monitor_watchdog()
+        
+    elif command == 'ylog':
+        ylog = YLog()
+        ylog.monitor_logs()
+        
+    elif command == 'ycrash':
+        ycrash = YCrash()
+        ycrash.monitor_crashes()
+        
     elif command == 'yhelp':
         show_help()
         
